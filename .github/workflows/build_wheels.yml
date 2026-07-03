@@ -71,7 +71,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\boost_install
-          key: boost-1.84.0-python${{ matrix.python-version }}-b2msvc-v1
+          key: boost-1.84.0-python${{ matrix.python-version }}-userconfig-v1
 
       - name: Build Boost.Python from source (Windows)
         if: runner.os == 'Windows' && steps.cache-boost.outputs.cache-hit != 'true'
@@ -98,6 +98,20 @@ jobs:
           tar xzf boost.tar.gz
           Set-Location $BOOST_DIR
 
+          # Find cl.exe path from the VS environment
+          $clPath = (Get-Command cl -ErrorAction SilentlyContinue).Source
+          if (-not $clPath) {
+            Write-Error "cl.exe not found in PATH!"
+            exit 1
+          }
+          Write-Host "Using cl.exe: $clPath"
+
+          # Create user-config.jam to explicitly tell b2 where cl.exe is
+          # This avoids b2's broken auto-detection (which finds vc6)
+          $userConfig = "using msvc : 14.3 : `"$clPath`" ;"
+          Set-Content -Path "user-config.jam" -Value $userConfig
+          Write-Host "user-config.jam: $userConfig"
+
           # Bootstrap
           Write-Host "Bootstrapping..."
           & cmd /c "bootstrap.bat msvc --with-python=python --with-python-version=$PY_VER"
@@ -107,10 +121,9 @@ jobs:
           }
 
           # Build and install - static link
-          # Use toolset=msvc (auto-detect version from VS environment)
-          # Avoid msvc-14.3 which requires NuGet (msvc-setup.nup)
+          # --user-config forces b2 to use our cl.exe path
           Write-Host "Building..."
-          & cmd /c "b2 --with-python --with-thread --with-system toolset=msvc variant=release link=static threading=multi runtime-link=static address-model=64 --prefix=C:\boost_install -j2 install"
+          & cmd /c "b2 --with-python --with-thread --with-system --user-config=user-config.jam toolset=msvc-14.3 variant=release link=static threading=multi runtime-link=static address-model=64 --prefix=C:\boost_install -j2 install"
           if ($LASTEXITCODE -ne 0) {
             Write-Error "b2 build failed!"
             exit 1
