@@ -276,18 +276,17 @@ jobs:
 
       - name: Verify installation
         run: |
+          # cd away from source tree to avoid shadowing the installed wheel
+          cd /tmp
           python -c "from vnpy_xtppro.gateway import XtpProGateway; print('✓ XtpProGateway imported')"
           python -c "from vnpy_xtppro.api.xtp_pro_md_api import XtpProMdApi; print('✓ XtpProMdApi imported')"
-          # Check where vnxtpxquote.so is installed
           python -c "
           import vnpy_xtppro.api
           import sys, os, glob
           api_dir = os.path.dirname(vnpy_xtppro.api.__file__)
           print(f'api_dir: {api_dir}')
-          print(f'api_dir in sys.path: {api_dir in sys.path}')
           sos = glob.glob(os.path.join(api_dir, '*.so')) + glob.glob(os.path.join(api_dir, '*.pyd'))
           print(f'.so files in api_dir: {sos}')
-          # Try import after path setup
           from vnxtpxquote import QuoteApi
           print('✓ vnxtpxquote C++ binding imported')
           "
@@ -297,4 +296,5 @@ jobs:
           XTP_PRO_TEST_USER: ${{ secrets.XTP_PRO_TEST_USER }}
           XTP_PRO_TEST_PASSWORD: ${{ secrets.XTP_PRO_TEST_PASSWORD }}
         run: |
-          python -m pytest test/test_integration.py -v --tb=long -s --timeout=120
+          cd /tmp
+          python -m pytest $GITHUB_WORKSPACE/test/test_integration.py -v --tb=long -s --timeout=120
