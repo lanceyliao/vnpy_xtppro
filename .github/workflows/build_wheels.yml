@@ -74,22 +74,35 @@ jobs:
 
       - name: Build Boost.Python from source (Windows)
         if: runner.os == 'Windows' && steps.cache-boost.outputs.cache-hit != 'true'
-        shell: cmd
+        shell: pwsh
         run: |
-          echo Building Boost.Python from source...
-          set BOOST_VER=1.84.0
-          set BOOST_DIR=boost_1_84_0
+          Write-Host "Building Boost.Python from source..."
+          $BOOST_VER = "1.84.0"
+          $BOOST_DIR = "boost_$($BOOST_VER.Replace('.','_'))"
 
-          cd \tmp
-          curl -L -o boost.tar.gz "https://sourceforge.net/projects/boost/files/boost/%BOOST_VER%/%BOOST_DIR%.tar.gz/download"
+          # Download Boost source
+          $workDir = "$env:RUNNER_TEMP\boost_build"
+          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+          Set-Location $workDir
+
+          $url = "https://archives.boost.io/release/$BOOST_VER/source/$BOOST_DIR.tar.gz"
+          Write-Host "Downloading from $url"
+          curl.exe -L -o boost.tar.gz $url
+          if ((Get-Item boost.tar.gz).Length -lt 1MB) {
+            throw "Download failed - file too small"
+          }
+
+          Write-Host "Extracting..."
           tar xzf boost.tar.gz
-          cd %BOOST_DIR%
+          Set-Location $BOOST_DIR
 
-          :: Bootstrap with current Python
-          call bootstrap.bat --with-python=python --with-python-version=${{ matrix.python-version }}
+          # Bootstrap with current Python
+          Write-Host "Bootstrapping..."
+          & .\bootstrap.bat --with-python=python --with-python-version=${{ matrix.python-version }}
 
-          :: Build only what we need
-          b2 --with-python --with-thread --with-system variant=release link=shared threading=multi runtime-link=shared --prefix=C:\boost_install -j2 install
+          # Build and install
+          Write-Host "Building..."
+          & .\b2 --with-python --with-thread --with-system variant=release link=shared threading=multi runtime-link=shared --prefix=C:\boost_install -j2 install
 
       - name: Set Boost environment (Windows)
         if: runner.os == 'Windows'
