@@ -39,11 +39,9 @@ jobs:
           PY_VER_NODOT=$(python3 -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
           echo "Python version: $PY_VER (nodot: $PY_VER_NODOT)"
 
-          # 尝试安装系统 boost-python
           sudo apt-get update
           sudo apt-get install -y libboost-dev libboost-python${PY_VER_NODOT}-dev libboost-thread-dev libboost-system-dev || true
 
-          # 检查 boost_python 是否可用
           if ldconfig -p 2>/dev/null | grep -q "libboost_python"; then
             echo "System Boost.Python found!"
             ldconfig -p | grep libboost_python
@@ -60,49 +58,61 @@ jobs:
             sudo ldconfig
           fi
 
-          # 验证
           ldconfig -p | grep libboost_python || ls -la /usr/local/lib/libboost_python* 2>/dev/null
 
-      # ---- Windows: 从源码编译 Boost.Python (带缓存) ----
+      # ---- Windows: MSVC + Boost.Python 编译 ----
+      - name: Set up MSVC dev environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Cache Boost build (Windows)
         if: runner.os == 'Windows'
         id: cache-boost
         uses: actions/cache@v4
         with:
           path: C:\boost_install
-          key: boost-1.84.0-python${{ matrix.python-version }}-msvc
+          key: boost-1.84.0-python${{ matrix.python-version }}-msvc-v2
 
       - name: Build Boost.Python from source (Windows)
         if: runner.os == 'Windows' && steps.cache-boost.outputs.cache-hit != 'true'
-        shell: pwsh
+        shell: cmd
         run: |
-          Write-Host "Building Boost.Python from source..."
-          $BOOST_VER = "1.84.0"
-          $BOOST_DIR = "boost_$($BOOST_VER.Replace('.','_'))"
+          echo Building Boost.Python from source...
+          set BOOST_VER=1.84.0
+          set BOOST_DIR=boost_1_84_0
 
-          # Download Boost source
-          $workDir = "$env:RUNNER_TEMP\boost_build"
-          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
-          Set-Location $workDir
+          :: Create work dir
+          if not exist "%RUNNER_TEMP%\boost_build" mkdir "%RUNNER_TEMP%\boost_build"
+          cd /d "%RUNNER_TEMP%\boost_build"
 
-          $url = "https://archives.boost.io/release/$BOOST_VER/source/$BOOST_DIR.tar.gz"
-          Write-Host "Downloading from $url"
-          curl.exe -L -o boost.tar.gz $url
-          if ((Get-Item boost.tar.gz).Length -lt 1MB) {
-            throw "Download failed - file too small"
-          }
+          :: Download Boost source from boost.io (direct, no redirect)
+          curl.exe -L -o boost.tar.gz "https://archives.boost.io/release/%BOOST_VER%/source/%BOOST_DIR%.tar.gz"
+          for %%F in (boost.tar.gz) do if %%~zF LSS 1048576 (
+            echo Download failed - file too small
+            exit /b 1
+          )
 
-          Write-Host "Extracting..."
+          echo Extracting...
           tar xzf boost.tar.gz
-          Set-Location $BOOST_DIR
+          cd /d "%BOOST_DIR%"
 
-          # Bootstrap with current Python
-          Write-Host "Bootstrapping..."
-          & .\bootstrap.bat --with-python=python --with-python-version=${{ matrix.python-version }}
+          :: Bootstrap with MSVC toolset and current Python
+          echo Bootstrapping...
+          call bootstrap.bat msvc --with-python=python --with-python-version=${{ matrix.python-version }}
+          if errorlevel 1 (
+            echo Bootstrap failed!
+            exit /b 1
+          )
 
-          # Build and install
-          Write-Host "Building..."
-          & .\b2 --with-python --with-thread --with-system variant=release link=shared threading=multi runtime-link=shared --prefix=C:\boost_install -j2 install
+          :: Build and install only what we need
+          echo Building...
+          b2 --with-python --with-thread --with-system variant=release link=shared threading=multi runtime-link=shared --prefix=C:\boost_install -j2 install
+          if errorlevel 1 (
+            echo b2 build failed!
+            exit /b 1
+          )
+
+          echo Boost.Python built successfully!
 
       - name: Set Boost environment (Windows)
         if: runner.os == 'Windows'
@@ -113,17 +123,12 @@ jobs:
           echo "BOOST_INCLUDE=$boostRoot\include" >> $env:GITHUB_ENV
           echo "BOOST_LIB=$boostRoot\lib" >> $env:GITHUB_ENV
 
-          # Verify
           if (Test-Path "$boostRoot\include\boost") {
             Write-Host "✅ Boost headers found"
           } else {
             Write-Host "❌ Boost headers NOT found at $boostRoot\include"
           }
           Get-ChildItem "$boostRoot\lib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
-
-      - name: Set up MSVC dev environment (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
 
       # ---- Build wheel ----
       - name: Build wheel (Linux)
