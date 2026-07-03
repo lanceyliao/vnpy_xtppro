@@ -44,7 +44,7 @@ jobs:
           sudo apt-get install -y libboost-dev libboost-python${PY_VER_NODOT}-dev libboost-thread-dev libboost-system-dev || true
 
           # 检查 boost_python 是否可用
-          if ldconfig -p | grep -q "libboost_python"; then
+          if ldconfig -p 2>/dev/null | grep -q "libboost_python"; then
             echo "System Boost.Python found!"
             ldconfig -p | grep libboost_python
           else
@@ -52,7 +52,6 @@ jobs:
             cd /tmp
             BOOST_VER="1.84.0"
             BOOST_DIR="boost_${BOOST_VER//./_}"
-            # SourceForge mirror (JFrog Artifactory deprecated)
             wget -q "https://sourceforge.net/projects/boost/files/boost/${BOOST_VER}/${BOOST_DIR}.tar.gz/download" -O boost.tar.gz
             tar xzf boost.tar.gz
             cd ${BOOST_DIR}
@@ -76,7 +75,9 @@ jobs:
           if (-not (Test-Path $env:BOOST_ROOT)) {
             Write-Host "Downloading Boost $BOOST_VER from SourceForge..."
             $url = "https://sourceforge.net/projects/boost/files/boost/$BOOST_VER/$BOOST_DIR.tar.gz/download"
-            Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\boost.tar.gz" -MaximumRedirection 5
+            # SourceForge redirects; use WebClient for proper redirect handling
+            $wc = New-Object System.Net.WebClient
+            $wc.DownloadFile($url, "$env:TEMP\boost.tar.gz")
             tar xzf "$env:TEMP\boost.tar.gz" -C C:\
             cd "C:\$BOOST_DIR"
             .\bootstrap.bat --with-python
@@ -85,29 +86,15 @@ jobs:
 
           echo "BOOST_ROOT=$env:BOOST_ROOT" >> $env:GITHUB_ENV
 
-      # ---- Linux: Build with meson ----
-      - name: Install meson/ninja (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get install -y meson ninja-build
-
-      - name: Build C++ bindings (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          cd vnpy_xtppro/api
-          meson setup builddir --prefix=/usr/local
-          ninja -C builddir
-          sudo ninja -C builddir install
+      # ---- Build wheel ----
+      - name: Set up MSVC dev environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build wheel (Linux)
         if: runner.os == 'Linux'
         run: |
           python -m build --wheel
-
-      # ---- Windows: Build ----
-      - name: Set up MSVC dev environment (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build wheel (Windows, MSVC)
         if: runner.os == 'Windows'
@@ -151,7 +138,7 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
-  # ---- Python 单元测试（不需要真实 SDK）----
+  # ---- Python 单元测试（不需要真实 SDK / vnpy）----
   test:
     name: Test py${{ matrix.python-version }}
     runs-on: ubuntu-latest
@@ -170,8 +157,8 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          pip install pytest
+          pip install vnpy pytest
 
-      - name: Run pure Python tests
+      - name: Run pure Python tests (bar_generator, unit, mock)
         run: |
-          python -m pytest test/ -v --tb=short --ignore=test/test_md_connect.py
+          python -m pytest test/test_bar_generator.py test/test_unit.py test/test_mock.py -v --tb=short
