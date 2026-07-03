@@ -278,8 +278,19 @@ jobs:
         run: |
           python -c "from vnpy_xtppro.gateway import XtpProGateway; print('✓ XtpProGateway imported')"
           python -c "from vnpy_xtppro.api.xtp_pro_md_api import XtpProMdApi; print('✓ XtpProMdApi imported')"
-          python -c "from vnxtpxquote import QuoteApi; print('✓ vnxtpxquote C++ binding imported')"
-          python -c "import vnxtpxquote; print('✓ vnxtpxquote dir:', [x for x in dir(vnxtpxquote) if not x.startswith('_')][:10])"
+          # Check where vnxtpxquote.so is installed
+          python -c "
+          import vnpy_xtppro.api
+          import sys, os, glob
+          api_dir = os.path.dirname(vnpy_xtppro.api.__file__)
+          print(f'api_dir: {api_dir}')
+          print(f'api_dir in sys.path: {api_dir in sys.path}')
+          sos = glob.glob(os.path.join(api_dir, '*.so')) + glob.glob(os.path.join(api_dir, '*.pyd'))
+          print(f'.so files in api_dir: {sos}')
+          # Try import after path setup
+          from vnxtpxquote import QuoteApi
+          print('✓ vnxtpxquote C++ binding imported')
+          "
 
       - name: Run integration test (real XTP Pro MD server)
         env:
