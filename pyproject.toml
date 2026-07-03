@@ -19,7 +19,7 @@ classifiers = [
     "Natural Language :: Chinese (Simplified)",
 ]
 requires-python = ">=3.10"
-dependencies = ["veighna_studio>=3.0.0"]
+dependencies = ["vnpy>=3.0.0"]
 keywords = ["quant", "quantitative", "investment", "trading", "algotrading", "xtp", "xtppro"]
 
 [project.urls]
