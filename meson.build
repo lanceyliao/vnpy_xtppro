@@ -46,9 +46,10 @@ if host_machine.system() == 'windows'
                                      dirs: [lib_dir, api_dir],
                                      required: true)
 
-  # Boost thread/system for static link on Windows
+  # Boost thread/system/chrono for static link on Windows
   boost_thread_dep = dependency('', required: false)
   boost_system_dep = dependency('', required: false)
+  boost_chrono_dep = dependency('', required: false)
 
 # ---- Linux 编译选项 ----
 else
@@ -139,9 +140,11 @@ if host_machine.system() != 'windows' and not boost_python_dep.found()
   # 额外 Boost 依赖
   boost_thread_dep = dependency('boost_thread', required: false)
   boost_system_dep = dependency('boost_system', required: false)
+  boost_chrono_dep = dependency('boost_chrono', required: false)
 else
   boost_thread_dep = dependency('', required: false)
   boost_system_dep = dependency('', required: false)
+  boost_chrono_dep = dependency('', required: false)
 endif
 
 # 4. Windows: 检查 conda-forge / BOOST_INCLUDE / BOOST_LIB
@@ -170,7 +173,7 @@ if host_machine.system() == 'windows' and not boost_python_dep.found()
           boost_python_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
         endif
       endforeach
-      # Also find boost_thread and boost_system for static link
+      # Also find boost_thread, boost_system, boost_chrono for static link
       boost_thread_names = [
         'boost_thread',                                    # CMake system layout
         'boost_thread-vc143-mt-s-x64-1_84',
@@ -181,6 +184,11 @@ if host_machine.system() == 'windows' and not boost_python_dep.found()
         'boost_system-vc143-mt-s-x64-1_84',
         'boost_system-vc143-mt-s64-1_84',
       ]
+      boost_chrono_names = [
+        'boost_chrono',                                    # CMake system layout
+        'boost_chrono-vc143-mt-s-x64-1_84',
+        'boost_chrono-vc143-mt-s64-1_84',
+      ]
       foreach name : boost_thread_names
         if not boost_thread_dep.found()
           boost_thread_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
@@ -189,6 +197,11 @@ if host_machine.system() == 'windows' and not boost_python_dep.found()
       foreach name : boost_system_names
         if not boost_system_dep.found()
           boost_system_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
+        endif
+      endforeach
+      foreach name : boost_chrono_names
+        if not boost_chrono_dep.found()
+          boost_chrono_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
         endif
       endforeach
     endif
@@ -215,7 +228,7 @@ md_module = py.extension_module(
   'vnxtpxquote',
   sources: ['vnpy_xtppro/api/source/vnxtpxquote.cpp'],
   include_directories: include_dirs,
-  dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep],
+  dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep, boost_chrono_dep],
   cpp_args: extra_cpp_args,
   link_args: md_link_args,
   install: true,
@@ -233,7 +246,7 @@ td_module = py.extension_module(
   'vnxtpxtrader',
   sources: ['vnpy_xtppro/api/source/vnxtpxtrader.cpp'],
   include_directories: include_dirs,
-  dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep],
+  dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep, boost_chrono_dep],
   cpp_args: extra_cpp_args,
   link_args: td_link_args,
   install: true,

@@ -71,7 +71,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\boost_install
-          key: boost-1.84.0-python${{ matrix.python-version }}-userconfig-v1
+          key: boost-1.84.0-python${{ matrix.python-version }}-userconfig-v2
 
       - name: Build Boost.Python from source (Windows)
         if: runner.os == 'Windows' && steps.cache-boost.outputs.cache-hit != 'true'
@@ -123,7 +123,7 @@ jobs:
           # Build and install - static link
           # --user-config forces b2 to use our cl.exe path
           Write-Host "Building..."
-          & cmd /c "b2 --with-python --with-thread --with-system --user-config=user-config.jam toolset=msvc-14.3 variant=release link=static threading=multi runtime-link=static address-model=64 --prefix=C:\boost_install -j2 install"
+          & cmd /c "b2 --with-python --with-thread --with-system --with-chrono --user-config=user-config.jam toolset=msvc-14.3 variant=release link=static threading=multi runtime-link=static address-model=64 --prefix=C:\boost_install -j2 install"
           if ($LASTEXITCODE -ne 0) {
             Write-Error "b2 build failed!"
             exit 1
