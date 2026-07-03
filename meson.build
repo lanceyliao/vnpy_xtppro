@@ -82,9 +82,12 @@ py_ver = py.version()
 py_major = py_ver.split('.').get(0)
 py_minor = py_ver.split('.').get(1)
 
+# 尝试多种库名格式（不同平台/包管理器命名不同）
 boost_python_lib_names = [
-  'boost_python' + py_major + py_minor,     # boost_python310
+  'boost_python' + py_major + py_minor,     # boost_python310 (Linux b2)
+  'boost_python' + py_major + 'py' + py_minor,  # boost_python3py310 (conda-forge)
   'boost_python' + py_major,                 # boost_python3
+  'boost_python-py' + py_major + py_minor,  # boost_python-py310
   'boost_python3',
 ]
 
@@ -125,38 +128,33 @@ else
   boost_system_dep = dependency('', required: false)
 endif
 
-# 4. Windows: 检查 vcpkg / BOOST_ROOT
+# 4. Windows: 检查 conda-forge / BOOST_INCLUDE / BOOST_LIB
 if host_machine.system() == 'windows' and not boost_python_dep.found()
-  # vcpkg 路径
-  vcpkg_root = get_option('prefix')  # fallback
-  vcpkg_inc = ''
-  vcpkg_lib = ''
+  # 优先使用 conda-forge 环境变量 (BOOST_INCLUDE / BOOST_LIB)
+  boost_inc_env = run_command('python', '-c', 'import os; print(os.environ.get("BOOST_INCLUDE",""))', check: false).stdout().strip()
+  boost_lib_env = run_command('python', '-c', 'import os; print(os.environ.get("BOOST_LIB",""))', check: false).stdout().strip()
 
-  # 尝试环境变量 VCPKG_ROOT
-  vcpkg_env = run_command('python3', '-c', 'import os; print(os.environ.get("VCPKG_ROOT",""))', check: false).stdout().strip()
-  if vcpkg_env != ''
-    vcpkg_inc = vcpkg_env / 'installed/x64-windows/include'
-    vcpkg_lib = vcpkg_env / 'installed/x64-windows/lib'
-  endif
-
-  # 尝试环境变量 BOOST_ROOT
-  if vcpkg_inc == ''
-    boost_env = run_command('python3', '-c', 'import os; print(os.environ.get("BOOST_ROOT",""))', check: false).stdout().strip()
-    if boost_env != ''
-      vcpkg_inc = boost_env / 'include'
-      vcpkg_lib = boost_env / 'lib'
+  # 回退到 BOOST_ROOT
+  if boost_inc_env == ''
+    boost_root = run_command('python', '-c', 'import os; print(os.environ.get("BOOST_ROOT",""))', check: false).stdout().strip()
+    if boost_root != ''
+      boost_inc_env = boost_root / 'include'
+      boost_lib_env = boost_root / 'lib'
     endif
   endif
 
   # 如果找到了额外 include 路径，追加到 include_dirs
-  if vcpkg_inc != '' and fs.is_dir(vcpkg_inc)
-    boost_inc_dir = include_directories(vcpkg_inc)
+  if boost_inc_env != '' and fs.is_dir(boost_inc_env)
+    boost_inc_dir = include_directories(boost_inc_env)
     include_dirs = [include_dirs, boost_inc_dir]
-    foreach name : boost_python_lib_names
-      if not boost_python_dep.found()
-        boost_python_dep = cpp.find_library(name, dirs: [vcpkg_lib], required: false)
-      endif
-    endforeach
+    message('Using Boost include from: ' + boost_inc_env)
+    if boost_lib_env != ''
+      foreach name : boost_python_lib_names
+        if not boost_python_dep.found()
+          boost_python_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
+        endif
+      endforeach
+    endif
   endif
 endif
 

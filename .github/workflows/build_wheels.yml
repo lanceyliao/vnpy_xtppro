@@ -63,53 +63,59 @@ jobs:
           # 验证
           ldconfig -p | grep libboost_python || ls -la /usr/local/lib/libboost_python* 2>/dev/null
 
-      # ---- Windows: 安装 Boost.Python ----
-      - name: Install Boost.Python (Windows)
+      # ---- Windows: 用 conda-forge 安装预编译 Boost.Python ----
+      - name: Set up Miniconda (Windows)
+        if: runner.os == 'Windows'
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+          channels: conda-forge,defaults
+          channel-priority: strict
+          activate-environment: build
+          auto-activate-base: false
+
+      - name: Install Boost.Python via conda-forge (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $BOOST_VER = "1.84.0"
-          $BOOST_DIR = "boost_$($BOOST_VER.Replace('.','_'))"
+          # Install pre-built Boost from conda-forge (fast, no compilation)
+          conda install -y -c conda-forge libboost-python boost-cpp
 
-          # Check if already installed via choco
-          $chocoBoost = "C:\local\boost_1_84_0"
-          if (Test-Path "$chocoBoost\boost") {
-            $env:BOOST_ROOT = $chocoBoost
-            echo "BOOST_ROOT=$env:BOOST_ROOT" >> $env:GITHUB_ENV
-            echo "Boost already installed at $chocoBoost"
-            return
-          }
+          # Set environment variables for meson
+          $condaPrefix = conda info --base
+          $envPath = "$condaPrefix\envs\build"
 
-          # Try conda-forge prebuilt boost (fastest)
-          Write-Host "Installing Boost via conda-forge..."
-          pip install conda 2>$null
-          # Use vcpkg for Boost
-          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg 2>$null
-          if (Test-Path C:\vcpkg\vcpkg.exe) {
-            Write-Host "vcpkg already bootstrapped"
+          # conda-forge layout: Library/include + Library/lib
+          $boostInclude = "$envPath\Library\include"
+          $boostLib = "$envPath\Library\lib"
+
+          Write-Host "Boost include: $boostInclude"
+          Write-Host "Boost lib: $boostLib"
+
+          # Verify files exist
+          if (Test-Path "$boostInclude\boost") {
+            Write-Host "✅ Boost headers found"
           } else {
-            cd C:\vcpkg
-            .\bootstrap-vcpkg.bat -disableMetrics
+            # Try alternative layout
+            $boostInclude = "$envPath\include"
+            $boostLib = "$envPath\lib"
+            Write-Host "Trying alternative: $boostInclude"
           }
-          C:\vcpkg\vcpkg install boost-python:x64-windows boost-thread:x64-windows boost-system:x64-windows
-          $env:BOOST_ROOT = "C:\vcpkg\installed\x64-windows"
-          echo "BOOST_ROOT=$env:BOOST_ROOT" >> $env:GITHUB_ENV
-          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
 
-      # ---- Build wheel ----
+          # List boost_python libs
+          Get-ChildItem "$boostLib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
+          Get-ChildItem "$boostLib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
+
+          # Export for meson
+          echo "BOOST_INCLUDE=$boostInclude" >> $env:GITHUB_ENV
+          echo "BOOST_LIB=$boostLib" >> $env:GITHUB_ENV
+          echo "CONDA_ENV_PATH=$envPath" >> $env:GITHUB_ENV
+
       - name: Set up MSVC dev environment (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Set Boost environment for build (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Override VCPKG_ROOT to our installed location (msvc-dev-cmd may set wrong one)
-          $env:VCPKG_ROOT = "C:\vcpkg"
-          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-          echo "BOOST_ROOT=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
-
+      # ---- Build wheel ----
       - name: Build wheel (Linux)
         if: runner.os == 'Linux'
         run: |
