@@ -149,7 +149,7 @@ if host_machine.system() == 'windows' and not boost_python_dep.found()
   endif
 
   # 如果找到了额外 include 路径，追加到 include_dirs
-  if vcpkg_inc != ''
+  if vcpkg_inc != '' and fs.is_dir(vcpkg_inc)
     boost_inc_dir = include_directories(vcpkg_inc)
     include_dirs = [include_dirs, boost_inc_dir]
     foreach name : boost_python_lib_names

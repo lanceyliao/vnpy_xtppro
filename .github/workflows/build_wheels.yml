@@ -101,6 +101,15 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Set Boost environment for build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Override VCPKG_ROOT to our installed location (msvc-dev-cmd may set wrong one)
+          $env:VCPKG_ROOT = "C:\vcpkg"
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+          echo "BOOST_ROOT=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
+
       - name: Build wheel (Linux)
         if: runner.os == 'Linux'
         run: |
