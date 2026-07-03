@@ -54,7 +54,7 @@ jobs:
             tar xzf boost.tar.gz
             cd ${BOOST_DIR}
             ./bootstrap.sh --with-python=python3 --with-python-version=${PY_VER}
-            sudo ./b2 --with-python --with-thread --with-system variant=release link=shared threading=multi -j$(nproc) install
+            sudo ./b2 --with-python --with-thread --with-system variant=release link=static runtime-link=static threading=multi -j$(nproc) install
             sudo ldconfig
           fi
 
@@ -250,18 +250,13 @@ jobs:
           name: vnpy_xtppro-ubuntu-X64-py${{ matrix.python-version }}
           path: dist
 
-      - name: Install system dependencies (ta-lib + Boost)
+      - name: Install system dependencies (ta-lib)
         run: |
           # TA-Lib C 库 — 直接用官方 deb 包（比 source compile 快且稳）
           cd /tmp
           wget -q https://github.com/TA-Lib/ta-lib/releases/download/v0.6.4/ta-lib_0.6.4_amd64.deb
           sudo dpkg -i ta-lib_0.6.4_amd64.deb
           sudo ldconfig
-
-          # Boost.Python (vnpy 依赖)
-          PY_VER_NODOT=$(python3 -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
-          sudo apt-get update
-          sudo apt-get install -y libboost-dev libboost-python${PY_VER_NODOT}-dev || true
 
       - name: Install Python dependencies
         run: |
