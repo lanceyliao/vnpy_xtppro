@@ -78,6 +78,26 @@ LOGLEVEL_VT2XTP: dict[str, int] = {
     "TRACE": 5,
 }
 
+# XTP Pro data_type_v2 枚举（XTPMD.data_type_v2 字段值）
+# 用于区分快照行情的 union 子字典类型 (stk/opt/bond)
+DATA_TYPE_V2_INDEX: int  = 1   # 指数
+DATA_TYPE_V2_OPTION: int = 2   # 期权
+DATA_TYPE_V2_ACTUAL: int = 3   # 现货（股票/基金/可转债等）
+DATA_TYPE_V2_BOND: int   = 4   # 债券（国债逆回购等）
+
+DATA_TYPE_V2_MAP: dict[int, str] = {
+    DATA_TYPE_V2_INDEX:  "INDEX",
+    DATA_TYPE_V2_OPTION: "OPTION",
+    DATA_TYPE_V2_ACTUAL: "ACTUAL",
+    DATA_TYPE_V2_BOND:   "BOND",
+}
+
+# 公网测试环境订阅限制（实盘无此限制）
+# 单订阅: 每个市场最多 100 只，沪深合计 200 只
+# 全订阅: 沪深合计仅推送 7 只合约
+# 实盘 UDP 无数量限制，但务必先做接入测试
+MAX_SUBSCRIBE_PER_MARKET_TEST: int = 100
+
 # 队列参数
 QUEUE_DRAIN_BATCH_SIZE = 2000
 QUEUE_DRAIN_IDLE_SLEEP = 0.01
@@ -448,6 +468,7 @@ def _md_process_worker(
     config_file: str,
     heartbeat_interval: int,
     local_ip: str,
+    max_subscribe: int,
     tick_queue: mp.Queue,
     bar_queue: mp.Queue,
     log_queue: mp.Queue,
@@ -593,6 +614,9 @@ def _md_process_worker(
                 elif action == CMD_SUBSCRIBE:
                     symbol = command["symbol"]
                     exchange_id = command["exchange_id"]
+                    if len(subscribed_symbols) >= max_subscribe:
+                        log_queue.put(f"订阅已达上限 {max_subscribe}，跳过 {symbol}")
+                        continue
                     if symbol not in subscribed_symbols:
                         api.subscribe_market_data(symbol, exchange_id)
                         subscribed_symbols.add(f"{symbol}.{exchange_id}")
@@ -626,6 +650,7 @@ DEFAULT_PORT = 3002
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_HEARTBEAT_INTERVAL = 15
+DEFAULT_MAX_SUBSCRIBE = 0  # 0=不限制
 
 
 class XtpProGateway(BaseGateway):
@@ -684,6 +709,7 @@ class XtpProGateway(BaseGateway):
         self._config_file = setting.get("配置文件", "")
         self._heartbeat_interval = int(setting.get("心跳间隔", DEFAULT_HEARTBEAT_INTERVAL))
         self._local_ip = setting.get("本地网卡IP", "")
+        self._max_subscribe = int(setting.get("最大订阅数", DEFAULT_MAX_SUBSCRIBE))
 
         # 启动子进程
         self._start_process()
@@ -752,6 +778,7 @@ class XtpProGateway(BaseGateway):
                 self._config_file,
                 self._heartbeat_interval,
                 self._local_ip,
+                self._max_subscribe,
                 self._tick_queue,
                 self._bar_queue,
                 self._log_queue,
@@ -884,4 +911,5 @@ def get_default_setting() -> Dict[str, Any]:
         "配置文件": "",
         "心跳间隔": DEFAULT_HEARTBEAT_INTERVAL,
         "本地网卡IP": "",
+        "最大订阅数": DEFAULT_MAX_SUBSCRIBE,
     }
