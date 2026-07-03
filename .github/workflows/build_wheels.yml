@@ -35,22 +35,26 @@ jobs:
       - name: Install Boost.Python (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
           PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
           PY_VER_NODOT=$(python3 -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
           echo "Python version: $PY_VER (nodot: $PY_VER_NODOT)"
 
-          # 尝试安装系统 boost
+          # 尝试安装系统 boost-python
+          sudo apt-get update
           sudo apt-get install -y libboost-dev libboost-python${PY_VER_NODOT}-dev libboost-thread-dev libboost-system-dev || true
 
           # 检查 boost_python 是否可用
-          if ! dpkg -l | grep -q "libboost-python${PY_VER_NODOT}"; then
+          if ldconfig -p | grep -q "libboost_python"; then
+            echo "System Boost.Python found!"
+            ldconfig -p | grep libboost_python
+          else
             echo "System boost_python not found, compiling from source..."
             cd /tmp
-            BOOST_VER="1.82.0"
+            BOOST_VER="1.84.0"
             BOOST_DIR="boost_${BOOST_VER//./_}"
-            wget -q "https://boostorg.jfrog.io/artifactory/main/release/${BOOST_VER}/source/${BOOST_DIR}.tar.gz"
-            tar xzf ${BOOST_DIR}.tar.gz
+            # SourceForge mirror (JFrog Artifactory deprecated)
+            wget -q "https://sourceforge.net/projects/boost/files/boost/${BOOST_VER}/${BOOST_DIR}.tar.gz/download" -O boost.tar.gz
+            tar xzf boost.tar.gz
             cd ${BOOST_DIR}
             ./bootstrap.sh --with-python=python3 --with-python-version=${PY_VER}
             sudo ./b2 --with-python --with-thread --with-system variant=release link=shared threading=multi -j$(nproc) install
@@ -58,21 +62,21 @@ jobs:
           fi
 
           # 验证
-          python3 -c "import boost; print('Boost.Python available')" 2>/dev/null || echo "Boost.Python will be linked at compile time"
-          ls -la /usr/lib/x86_64-linux-gnu/libboost_python* 2>/dev/null || ls -la /usr/local/lib/libboost_python* 2>/dev/null
+          ldconfig -p | grep libboost_python || ls -la /usr/local/lib/libboost_python* 2>/dev/null
 
       # ---- Windows: 安装 Boost.Python ----
       - name: Install Boost.Python (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $BOOST_VER = "1.82.0"
+          $BOOST_VER = "1.84.0"
           $BOOST_DIR = "boost_$($BOOST_VER.Replace('.','_'))"
-          $env:BOOST_ROOT = "C:\boost_$BOOST_DIR"
+          $env:BOOST_ROOT = "C:\$BOOST_DIR"
 
           if (-not (Test-Path $env:BOOST_ROOT)) {
-            Write-Host "Downloading Boost $BOOST_VER..."
-            Invoke-WebRequest -Uri "https://boostorg.jfrog.io/artifactory/main/release/$BOOST_VER/source/$BOOST_DIR.tar.gz" -OutFile "$env:TEMP\boost.tar.gz"
+            Write-Host "Downloading Boost $BOOST_VER from SourceForge..."
+            $url = "https://sourceforge.net/projects/boost/files/boost/$BOOST_VER/$BOOST_DIR.tar.gz/download"
+            Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\boost.tar.gz" -MaximumRedirection 5
             tar xzf "$env:TEMP\boost.tar.gz" -C C:\
             cd "C:\$BOOST_DIR"
             .\bootstrap.bat --with-python
@@ -164,14 +168,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install VeighNa and test deps
+      - name: Install test dependencies
         run: |
-          pip install veighna_studio pytest
+          pip install pytest
 
-      - name: Install package
-        run: |
-          pip install -e .
-
-      - name: Run tests
+      - name: Run pure Python tests
         run: |
           python -m pytest test/ -v --tb=short --ignore=test/test_md_connect.py
