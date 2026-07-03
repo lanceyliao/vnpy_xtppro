@@ -71,8 +71,16 @@ class XtpProMdApi:
         protocol: int = 1,
         log_level: int = 3,
         config_file: str = "",
+        heartbeat_interval: int = 15,
+        local_ip: str = "",
     ) -> None:
-        """连接行情服务器"""
+        """连接行情服务器
+
+        Args:
+            heartbeat_interval: 心跳间隔秒数，必须在Login前设置，默认15
+            local_ip: 本地网卡IP，空串则传None让API自动选择；
+                      注意：不能传"127.0.0.1"或空串给API
+        """
         self.userid = userid
         self.password = password
         self.client_id = client_id
@@ -81,6 +89,8 @@ class XtpProMdApi:
         self.protocol = protocol
         self.log_level = log_level
         self.config_file = config_file
+        self.heartbeat_interval = heartbeat_interval
+        self.local_ip = local_ip
 
         if not self.connect_status:
             self._create_api()
@@ -138,24 +148,42 @@ class XtpProMdApi:
         if self.config_file:
             self._api.setConfigFile(self.config_file)
 
+        # 设置心跳间隔（必须在Login前调用）
+        self._api.setHeartBeatInterval(self.heartbeat_interval)
+
     def _login(self) -> None:
-        """登录行情服务器"""
+        """登录行情服务器
+
+        Login 返回值:
+          0  = 登录成功
+         -1  = 连接服务器出错
+         -2  = 已存在连接（不允许重复登录）
+         -3  = 输入有错误
+        """
+        # local_ip: 不能传空串""或"127.0.0.1"，None让API自动选择网卡
+        local_ip_param = self.local_ip if self.local_ip else None
+
         n: int = self._api.login(
             self.server_ip,
             self.server_port,
             self.userid,
             self.password,
             self.protocol,
-            "",  # local_ip
+            local_ip_param,
         )
 
-        if not n:
+        if n == 0:
+            self.connect_status = True
+            self.login_status = True
+        elif n == -2:
+            # 已存在连接，视为已登录成功（重连场景）
             self.connect_status = True
             self.login_status = True
         else:
             error: dict = self._api.getApiLastError()
             raise ConnectionError(
-                f"XTP Pro 行情服务器登录失败，代码：{error.get('error_id', -1)}，"
+                f"XTP Pro 行情服务器登录失败(返回值={n})，"
+                f"代码：{error.get('error_id', -1)}，"
                 f"信息：{error.get('error_msg', 'unknown')}"
             )
 
@@ -243,6 +271,12 @@ class XtpProMdApi:
         if not self.login_status:
             return -1
         return self._api.queryAllTickersFullInfo(exchange_id)
+
+    def query_all_nq_tickers_full_info(self) -> int:
+        """查询北交所合约完整静态信息（XTP Pro 新增）"""
+        if not self.login_status:
+            return -1
+        return self._api.queryAllNQTickersFullInfo()
 
     def query_all_tickers_price_info(self, exchange_id: int) -> int:
         """查询合约最新价格信息（XTP Pro 需要 exchange_id 参数）"""
@@ -409,7 +443,8 @@ class XtpProMdApi:
 
     def onQueryAllNQTickersFullInfo(self, data: dict, error: dict, last: bool) -> None:
         """查询新三板合约完整静态信息回报"""
-        pass
+        if self.on_query_all_tickers:
+            self.on_query_all_tickers(data, error, last)
 
     def onXTPQuoteNQFullInfo(self, data: dict) -> None:
         """新三板合约完整静态信息盘中推送"""

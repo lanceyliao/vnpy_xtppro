@@ -107,9 +107,11 @@ def test_exchange_mapping():
     """测试交易所双向映射"""
     assert EXCHANGE_XTP2VT[1] == Exchange.SSE
     assert EXCHANGE_XTP2VT[2] == Exchange.SZSE
+    assert EXCHANGE_XTP2VT[3] == Exchange.BSE  # 北交所
     assert EXCHANGE_VT2XTP[Exchange.SSE] == 1
     assert EXCHANGE_VT2XTP[Exchange.SZSE] == 2
-    print("✓ 交易所映射正确")
+    assert EXCHANGE_VT2XTP[Exchange.BSE] == 3
+    print("✓ 交易所映射正确（含北交所）")
 
 
 def test_product_mapping():
@@ -339,7 +341,9 @@ def test_default_setting():
     assert setting["通讯协议"] == "TCP"
     assert setting["日志级别"] == "INFO"
     assert setting["客户端ID"] == 1
-    print("✓ 默认配置正确")
+    assert setting["心跳间隔"] == 15
+    assert "本地网卡IP" in setting
+    print("✓ 默认配置正确（含心跳间隔和本地网卡IP）")
 
 
 # ------------------------------------------------------------------

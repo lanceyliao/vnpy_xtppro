@@ -47,6 +47,7 @@ CHINA_TZ = ZoneInfo("Asia/Shanghai")
 EXCHANGE_XTP2VT: dict[int, Exchange] = {
     1: Exchange.SSE,    # 上证
     2: Exchange.SZSE,   # 深证
+    3: Exchange.BSE,    # 北交所 (XTP_EXCHANGE_NQ)
 }
 EXCHANGE_VT2XTP: dict[Exchange, int] = {v: k for k, v in EXCHANGE_XTP2VT.items()}
 
@@ -434,6 +435,8 @@ def _md_process_worker(
     protocol: int,
     log_level: int,
     config_file: str,
+    heartbeat_interval: int,
+    local_ip: str,
     tick_queue: mp.Queue,
     bar_queue: mp.Queue,
     log_queue: mp.Queue,
@@ -456,6 +459,19 @@ def _md_process_worker(
         write_log=lambda msg: log_queue.put(msg),
     )
 
+    # 合约查询同步：等待 is_last 后再查询下一个市场
+    query_complete_event: threading.Event = threading.Event()
+
+    def _on_query_all_tickers_impl(
+        data: dict,
+        error: dict,
+        last: bool,
+    ) -> None:
+        """处理合约查询回报，转换为 ContractData 放入队列"""
+        _on_query_all_tickers(data, error, last, tick_queue)
+        if last:
+            query_complete_event.set()
+
     try:
         api = XtpProMdApi()
 
@@ -476,9 +492,7 @@ def _md_process_worker(
         api.on_depth_market_data = lambda data, bql, bc, mbc, aql, ac, mac: _on_depth_market_data(
             data, bql, bc, mbc, aql, ac, mac, tick_queue, bar_gen
         )
-        api.on_query_all_tickers = lambda data, error, last: _on_query_all_tickers(
-            data, error, last, tick_queue
-        )
+        api.on_query_all_tickers = _on_query_all_tickers_impl
         api.on_tick_by_tick = lambda data: None  # 可扩展
 
         # 连接
@@ -486,12 +500,15 @@ def _md_process_worker(
             userid, password, client_id,
             server_ip, server_port,
             protocol, log_level, config_file,
+            heartbeat_interval, local_ip,
         )
         log_queue.put(f"XTP Pro 行情子进程已连接 {server_ip}:{server_port}")
 
-        # 查询合约
+        # 查询合约：逐市场查询，等待 is_last 后再查下一个（否则会断线！）
         for exchange_id in EXCHANGE_XTP2VT:
+            query_complete_event.clear()
             api.query_all_tickers(exchange_id)
+            query_complete_event.wait(timeout=30)  # 最多等30秒
         log_queue.put("已发起合约查询")
 
         # 启动 API 回调线程
@@ -518,33 +535,36 @@ def _md_process_worker(
                     api.on_depth_market_data = lambda data, bql, bc, mbc, aql, ac, mac: _on_depth_market_data(
                         data, bql, bc, mbc, aql, ac, mac, tick_queue, bar_gen
                     )
-                    api.on_query_all_tickers = lambda data, error, last: _on_query_all_tickers(
-                        data, error, last, tick_queue
-                    )
+                    api.on_query_all_tickers = _on_query_all_tickers_impl
                     api.on_tick_by_tick = lambda data: None
 
                     api.connect(
                         userid, password, client_id,
                         server_ip, server_port,
                         protocol, log_level, config_file,
+                        heartbeat_interval, local_ip,
                     )
                     api.init()
                     disconnected = False
                     log_queue.put(f"重连成功 {server_ip}:{server_port}")
 
-                    # 重新查询合约
+                    # 重新查询合约（逐市场，等待 is_last）
                     for exchange_id in EXCHANGE_XTP2VT:
+                        query_complete_event.clear()
                         api.query_all_tickers(exchange_id)
+                        query_complete_event.wait(timeout=30)
                     log_queue.put("重连后已发起合约查询")
 
-                    # 重新订阅所有合约
-                    for sym in list(subscribed_symbols):
-                        # sym 格式: "symbol.exchange_id"，需要拆分
-                        parts = sym.split(".")
-                        if len(parts) == 2:
-                            api.subscribe_market_data(parts[0], int(parts[1]))
-                    if subscribed_symbols:
-                        log_queue.put(f"重连后已重新订阅 {len(subscribed_symbols)} 个合约")
+                    # 重新订阅：TCP需要重新订阅，UDP组播不受影响无需重新订阅
+                    if protocol == 1:  # TCP
+                        for sym in list(subscribed_symbols):
+                            parts = sym.split(".")
+                            if len(parts) == 2:
+                                api.subscribe_market_data(parts[0], int(parts[1]))
+                        if subscribed_symbols:
+                            log_queue.put(f"重连后已重新订阅 {len(subscribed_symbols)} 个合约")
+                    else:
+                        log_queue.put("UDP模式重连，组播行情不受影响，无需重新订阅")
 
                 except Exception as e:
                     log_queue.put(f"重连失败: {e}, 将在 {reconnect_delay}s 后重试")
@@ -589,6 +609,7 @@ DEFAULT_SERVER = "122.112.252.150"
 DEFAULT_PORT = 3002
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_HEARTBEAT_INTERVAL = 15
 
 
 class XtpProGateway(BaseGateway):
@@ -645,6 +666,8 @@ class XtpProGateway(BaseGateway):
         self._protocol = PROTOCOL_VT2XTP.get(setting.get("通讯协议", DEFAULT_PROTOCOL), 1)
         self._log_level = LOGLEVEL_VT2XTP.get(setting.get("日志级别", DEFAULT_LOG_LEVEL), 3)
         self._config_file = setting.get("配置文件", "")
+        self._heartbeat_interval = int(setting.get("心跳间隔", DEFAULT_HEARTBEAT_INTERVAL))
+        self._local_ip = setting.get("本地网卡IP", "")
 
         # 启动子进程
         self._start_process()
@@ -711,6 +734,8 @@ class XtpProGateway(BaseGateway):
                 self._protocol,
                 self._log_level,
                 self._config_file,
+                self._heartbeat_interval,
+                self._local_ip,
                 self._tick_queue,
                 self._bar_queue,
                 self._log_queue,
@@ -841,4 +866,6 @@ def get_default_setting() -> Dict[str, Any]:
         "通讯协议": DEFAULT_PROTOCOL,
         "日志级别": DEFAULT_LOG_LEVEL,
         "配置文件": "",
+        "心跳间隔": DEFAULT_HEARTBEAT_INTERVAL,
+        "本地网卡IP": "",
     }
