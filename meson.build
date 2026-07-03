@@ -96,12 +96,14 @@ boost_python_lib_names = [
 ]
 
 # Windows static link: b2 generates names like boost_python311-vc143-mt-s-x64-1_84
+# CMake build (BUILD_SHARED_LIBS=OFF) may generate simpler names
 if host_machine.system() == 'windows'
   boost_python_lib_names += [
-    'boost_python' + py_major + py_minor + '-vc143-mt-s-x64-1_84',   # static x64
-    'boost_python' + py_major + py_minor + '-vc143-mt-s64-1_84',     # static x64 alt
-    'boost_python' + py_major + py_minor + '-vc143-mt-s-x64-1_86',   # 1.86
-    'boost_python' + py_major + py_minor + '-vc143-mt-s64-1_86',     # 1.86 alt
+    'boost_python' + py_major + py_minor,                               # CMake system layout
+    'boost_python' + py_major + py_minor + '-vc143-mt-s-x64-1_84',      # b2 static x64
+    'boost_python' + py_major + py_minor + '-vc143-mt-s64-1_84',        # b2 static x64 alt
+    'boost_python' + py_major + py_minor + '-vc143-mt-s-x64-1_86',      # 1.86
+    'boost_python' + py_major + py_minor + '-vc143-mt-s64-1_86',        # 1.86 alt
   ]
 endif
 
@@ -170,10 +172,12 @@ if host_machine.system() == 'windows' and not boost_python_dep.found()
       endforeach
       # Also find boost_thread and boost_system for static link
       boost_thread_names = [
+        'boost_thread',                                    # CMake system layout
         'boost_thread-vc143-mt-s-x64-1_84',
         'boost_thread-vc143-mt-s64-1_84',
       ]
       boost_system_names = [
+        'boost_system',                                    # CMake system layout
         'boost_system-vc143-mt-s-x64-1_84',
         'boost_system-vc143-mt-s64-1_84',
       ]

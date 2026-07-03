@@ -71,13 +71,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\boost_install
-          key: boost-1.84.0-python${{ matrix.python-version }}-msvc143-v1
+          key: boost-1.84.0-python${{ matrix.python-version }}-cmake-v1
 
       - name: Build Boost.Python from source (Windows)
         if: runner.os == 'Windows' && steps.cache-boost.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          Write-Host "Building Boost.Python from source..."
+          Write-Host "Building Boost.Python via CMake..."
           $BOOST_VER = "1.84.0"
           $BOOST_DIR = "boost_1_84_0"
           $PY_VER = "${{ matrix.python-version }}"
@@ -98,24 +98,43 @@ jobs:
           tar xzf boost.tar.gz
           Set-Location $BOOST_DIR
 
-          # Bootstrap - use msvc toolset (bootstrap.bat doesn't accept versioned toolset)
-          Write-Host "Bootstrapping..."
-          & cmd /c "bootstrap.bat msvc --with-python=python --with-python-version=$PY_VER"
+          # Get Python info
+          $pyRoot = (python -c "import sys, sysconfig; print(sysconfig.get_config_var('installed_base'))").Trim()
+          $pyInclude = (python -c "import sysconfig; print(sysconfig.get_path('include'))").Trim()
+          $pyLibDir = (python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))").Trim()
+          Write-Host "Python root: $pyRoot"
+          Write-Host "Python include: $pyInclude"
+          Write-Host "Python lib dir: $pyLibDir"
+
+          # Configure with CMake
+          $installDir = "C:\boost_install"
+          cmake -B build `
+            -DBOOST_INCLUDE_LIBRARIES="python;thread;system" `
+            -DCMAKE_INSTALL_PREFIX="$installDir" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DPython_INCLUDE_DIR="$pyInclude" `
+            -DPython_LIBRARY="$pyLibDir\python${PY_VER.Replace('.','')}.lib" `
+            -DPython_EXECUTABLE="$(Get-Command python).Source" `
+            -DBUILD_SHARED_LIBS=OFF
+
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Bootstrap failed!"
+            Write-Error "CMake configure failed!"
             exit 1
           }
 
-          # Build and install - static link (headers define BOOST_PYTHON_STATIC_LIB)
-          # Explicitly set toolset=msvc-14.3 to avoid vc6 misdetection
-          Write-Host "Building..."
-          & cmd /c "b2 --with-python --with-thread --with-system toolset=msvc-14.3 variant=release link=static threading=multi runtime-link=static address-model=64 --prefix=C:\boost_install -j2 install"
+          # Build
+          cmake --build build --config Release -j 2
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "b2 build failed!"
+            Write-Error "CMake build failed!"
             exit 1
           }
 
+          # Install
+          cmake --install build
           Write-Host "Boost.Python built successfully!"
+
+          # Verify
+          Get-ChildItem "$installDir\lib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
 
       - name: Set Boost environment (Windows)
         if: runner.os == 'Windows'
@@ -126,10 +145,22 @@ jobs:
           echo "BOOST_INCLUDE=$boostRoot\include" >> $env:GITHUB_ENV
           echo "BOOST_LIB=$boostRoot\lib" >> $env:GITHUB_ENV
 
-          if (Test-Path "$boostRoot\include\boost") {
-            Write-Host "Boost headers found"
+          # CMake install puts headers in include/boost-1_84
+          $boostInc = "$boostRoot\include"
+          if (-not (Test-Path "$boostInc\boost")) {
+            # Check versioned include dir
+            $versionedInc = Get-ChildItem "$boostRoot\include" -Directory | Where-Object { $_.Name -match "boost-" } | Select-Object -First 1
+            if ($versionedInc) {
+              $boostInc = $versionedInc.FullName
+              echo "BOOST_INCLUDE=$boostInc" >> $env:GITHUB_ENV
+              Write-Host "Using versioned include dir: $boostInc"
+            }
+          }
+
+          if (Test-Path "$boostInc\boost") {
+            Write-Host "Boost headers found at $boostInc"
           } else {
-            Write-Host "Boost headers NOT found at $boostRoot\include"
+            Write-Host "Boost headers NOT found at $boostInc"
           }
           Get-ChildItem "$boostRoot\lib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
 
