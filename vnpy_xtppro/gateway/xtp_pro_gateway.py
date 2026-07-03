@@ -656,7 +656,7 @@ def _md_process_worker(
 # 网关主类
 # ------------------------------------------------------------------
 
-DEFAULT_SERVER = "122.112.252.150"
+DEFAULT_SERVER = "119.3.103.38"
 DEFAULT_PORT = 3002
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_LOG_LEVEL = "INFO"
@@ -704,12 +704,21 @@ class XtpProGateway(BaseGateway):
         self._subscribed: Set[str] = set()
         self._max_quotes: int = DEFAULT_MAX_QUOTES_PER_PROCESS
 
+        # 合约查询同步（connect 等待合约批量推送完毕再返回）
+        self._contracts_ready: threading.Event = threading.Event()
+        self._exchanges_queried: int = 0
+
     # ------------------------------------------------------------------
     # BaseGateway 接口
     # ------------------------------------------------------------------
 
     def connect(self, setting: dict) -> None:
-        """连接行情服务器"""
+        """连接行情服务器
+
+        启动第一个 worker 进程，等待合约查询完成后返回。
+        这样 on_contract 在 subscribe 之前批量触发完毕，
+        与 vnpy_tq / vnpy_ctp 行为一致。
+        """
         self._userid = setting.get("用户名", "")
         self._password = setting.get("密码", "")
         self._client_id = int(setting.get("客户端ID", 1))
@@ -722,13 +731,29 @@ class XtpProGateway(BaseGateway):
         self._local_ip = setting.get("本地网卡IP", "")
         self._max_quotes = int(setting.get("每进程订阅数", DEFAULT_MAX_QUOTES_PER_PROCESS))
 
+        # 合约查询完成事件
+        self._contracts_ready: threading.Event = threading.Event()
+        self._exchanges_queried: int = 0
+
         # 启动 drain 线程
         self._start_drain()
 
-        self.write_log(
-            f"XTP Pro 行情网关已启动，服务器: {self._server_ip}:{self._server_port}，"
-            f"每进程容量: {self._max_quotes}"
-        )
+        # 立即启动第一个 worker 进程（合约查询在 worker 内完成）
+        self._allocate_process_slot()
+
+        # 等待合约查询完成（3 个市场各返回 is_last=True）
+        # 最多等 60s，超时不阻塞（非交易时段可能查不到合约）
+        contracts_ok = self._contracts_ready.wait(timeout=60)
+        if contracts_ok:
+            self.write_log(
+                f"合约查询完成，共 {len(symbol_contract_map)} 个合约，"
+                f"服务器: {self._server_ip}:{self._server_port}"
+            )
+        else:
+            self.write_log(
+                f"合约查询等待超时（可能非交易时段），"
+                f"已收到 {len(symbol_contract_map)} 个合约"
+            )
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """订阅行情：分配到有空位的子进程，满则起新进程"""
@@ -922,6 +947,13 @@ class XtpProGateway(BaseGateway):
             _, contract, last = item
             symbol_contract_map[contract.vt_symbol] = contract
             self.on_contract(contract)
+
+            # 追踪合约查询完成：每个市场查询返回 is_last=True
+            # 3 个市场（SSE/SZSE/BSE）全部完成后通知 connect() 等待
+            if last:
+                self._exchanges_queried += 1
+                if self._exchanges_queried >= len(EXCHANGE_XTP2VT):
+                    self._contracts_ready.set()
 
     def _process_bar_item(self, item: Any) -> None:
         """处理 bar 队列中的项目，推 EVENT_BAR"""

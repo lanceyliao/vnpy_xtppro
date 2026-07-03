@@ -336,7 +336,7 @@ def test_normalize_queue_exception():
 def test_default_setting():
     """测试默认配置"""
     setting = get_default_setting()
-    assert setting["行情服务器"] == "122.112.252.150"
+    assert setting["行情服务器"] == "119.3.103.38"
     assert setting["行情端口"] == 3002
     assert setting["通讯协议"] == "TCP"
     assert setting["日志级别"] == "INFO"

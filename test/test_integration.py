@@ -107,7 +107,7 @@ def gateway_and_collector():
         "用户名": os.environ["XTP_PRO_TEST_USER"],
         "密码": os.environ["XTP_PRO_TEST_PASSWORD"],
         "客户端ID": 1,
-        "行情服务器": "122.112.252.150",
+        "行情服务器": "119.3.103.38",
         "行情端口": 3002,
         "通讯协议": "TCP",
         "日志级别": "INFO",
@@ -118,8 +118,7 @@ def gateway_and_collector():
     }
 
     gw.connect(setting)
-    # 等待连接建立和合约查询
-    time.sleep(10)
+    # connect() 内部已等待合约查询完成，无需额外等待
 
     yield gw, collector, ee
 
