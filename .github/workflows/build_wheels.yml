@@ -71,48 +71,51 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\boost_install
-          key: boost-1.84.0-python${{ matrix.python-version }}-msvc-v2
+          key: boost-1.84.0-python${{ matrix.python-version }}-msvc143-v1
 
       - name: Build Boost.Python from source (Windows)
         if: runner.os == 'Windows' && steps.cache-boost.outputs.cache-hit != 'true'
-        shell: cmd
+        shell: pwsh
         run: |
-          echo Building Boost.Python from source...
-          set BOOST_VER=1.84.0
-          set BOOST_DIR=boost_1_84_0
+          Write-Host "Building Boost.Python from source..."
+          $BOOST_VER = "1.84.0"
+          $BOOST_DIR = "boost_1_84_0"
+          $PY_VER = "${{ matrix.python-version }}"
 
-          :: Create work dir
-          if not exist "%RUNNER_TEMP%\boost_build" mkdir "%RUNNER_TEMP%\boost_build"
-          cd /d "%RUNNER_TEMP%\boost_build"
+          $workDir = "$env:RUNNER_TEMP\boost_build"
+          New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+          Set-Location $workDir
 
-          :: Download Boost source from boost.io (direct, no redirect)
-          curl.exe -L -o boost.tar.gz "https://archives.boost.io/release/%BOOST_VER%/source/%BOOST_DIR%.tar.gz"
-          for %%F in (boost.tar.gz) do if %%~zF LSS 1048576 (
-            echo Download failed - file too small
-            exit /b 1
-          )
+          # Download Boost source
+          Write-Host "Downloading Boost $BOOST_VER..."
+          Invoke-WebRequest -Uri "https://archives.boost.io/release/$BOOST_VER/source/$BOOST_DIR.tar.gz" -OutFile "boost.tar.gz"
+          if ((Get-Item "boost.tar.gz").Length -lt 1MB) {
+            Write-Error "Download failed - file too small"
+            exit 1
+          }
 
-          echo Extracting...
+          Write-Host "Extracting..."
           tar xzf boost.tar.gz
-          cd /d "%BOOST_DIR%"
+          Set-Location $BOOST_DIR
 
-          :: Bootstrap with MSVC toolset and current Python
-          echo Bootstrapping...
-          call bootstrap.bat msvc --with-python=python --with-python-version=${{ matrix.python-version }}
-          if errorlevel 1 (
-            echo Bootstrap failed!
-            exit /b 1
-          )
+          # Bootstrap - explicitly use msvc-14.3 (VS 2022) toolset
+          Write-Host "Bootstrapping..."
+          & cmd /c "bootstrap.bat msvc-14.3 --with-python=python --with-python-version=$PY_VER"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Bootstrap failed!"
+            exit 1
+          }
 
-          :: Build and install only what we need
-          echo Building...
-          b2 --with-python --with-thread --with-system variant=release link=shared threading=multi runtime-link=shared --prefix=C:\boost_install -j2 install
-          if errorlevel 1 (
-            echo b2 build failed!
-            exit /b 1
-          )
+          # Build and install - static link (headers define BOOST_PYTHON_STATIC_LIB)
+          # Explicitly set toolset=msvc-14.3 to avoid vc6 misdetection
+          Write-Host "Building..."
+          & cmd /c "b2 --with-python --with-thread --with-system toolset=msvc-14.3 variant=release link=static threading=multi runtime-link=static address-model=64 --prefix=C:\boost_install -j2 install"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "b2 build failed!"
+            exit 1
+          }
 
-          echo Boost.Python built successfully!
+          Write-Host "Boost.Python built successfully!"
 
       - name: Set Boost environment (Windows)
         if: runner.os == 'Windows'
@@ -124,9 +127,9 @@ jobs:
           echo "BOOST_LIB=$boostRoot\lib" >> $env:GITHUB_ENV
 
           if (Test-Path "$boostRoot\include\boost") {
-            Write-Host "✅ Boost headers found"
+            Write-Host "Boost headers found"
           } else {
-            Write-Host "❌ Boost headers NOT found at $boostRoot\include"
+            Write-Host "Boost headers NOT found at $boostRoot\include"
           }
           Get-ChildItem "$boostRoot\lib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
 

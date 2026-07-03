@@ -46,6 +46,10 @@ if host_machine.system() == 'windows'
                                      dirs: [lib_dir, api_dir],
                                      required: true)
 
+  # Boost thread/system for static link on Windows
+  boost_thread_dep = dependency('', required: false)
+  boost_system_dep = dependency('', required: false)
+
 # ---- Linux 编译选项 ----
 else
   extra_cpp_args = [
@@ -90,6 +94,16 @@ boost_python_lib_names = [
   'boost_python-py' + py_major + py_minor,  # boost_python-py310
   'boost_python3',
 ]
+
+# Windows static link: b2 generates names like boost_python311-vc143-mt-s-x64-1_84
+if host_machine.system() == 'windows'
+  boost_python_lib_names += [
+    'boost_python' + py_major + py_minor + '-vc143-mt-s-x64-1_84',   # static x64
+    'boost_python' + py_major + py_minor + '-vc143-mt-s64-1_84',     # static x64 alt
+    'boost_python' + py_major + py_minor + '-vc143-mt-s-x64-1_86',   # 1.86
+    'boost_python' + py_major + py_minor + '-vc143-mt-s64-1_86',     # 1.86 alt
+  ]
+endif
 
 # 1. 尝试 pkg-config / meson dependency
 boost_python_dep = dependency('', required: false)
@@ -152,6 +166,25 @@ if host_machine.system() == 'windows' and not boost_python_dep.found()
       foreach name : boost_python_lib_names
         if not boost_python_dep.found()
           boost_python_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
+        endif
+      endforeach
+      # Also find boost_thread and boost_system for static link
+      boost_thread_names = [
+        'boost_thread-vc143-mt-s-x64-1_84',
+        'boost_thread-vc143-mt-s64-1_84',
+      ]
+      boost_system_names = [
+        'boost_system-vc143-mt-s-x64-1_84',
+        'boost_system-vc143-mt-s64-1_84',
+      ]
+      foreach name : boost_thread_names
+        if not boost_thread_dep.found()
+          boost_thread_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
+        endif
+      endforeach
+      foreach name : boost_system_names
+        if not boost_system_dep.found()
+          boost_system_dep = cpp.find_library(name, dirs: [boost_lib_env], required: false)
         endif
       endforeach
     endif
