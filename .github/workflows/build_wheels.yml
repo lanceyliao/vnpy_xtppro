@@ -98,9 +98,9 @@ jobs:
           tar xzf boost.tar.gz
           Set-Location $BOOST_DIR
 
-          # Bootstrap - explicitly use msvc-14.3 (VS 2022) toolset
+          # Bootstrap - use msvc toolset (bootstrap.bat doesn't accept versioned toolset)
           Write-Host "Bootstrapping..."
-          & cmd /c "bootstrap.bat msvc-14.3 --with-python=python --with-python-version=$PY_VER"
+          & cmd /c "bootstrap.bat msvc --with-python=python --with-python-version=$PY_VER"
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Bootstrap failed!"
             exit 1
