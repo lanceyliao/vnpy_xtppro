@@ -618,6 +618,13 @@ def _md_process_worker(
                         log_queue.put(f"订阅已达上限 {max_subscribe}，跳过 {symbol}")
                         continue
                     if symbol not in subscribed_symbols:
+                        # 公网测试环境提醒
+                        import datetime as _dt
+                        now = _dt.datetime.now()
+                        if now.hour < 8 or (now.hour == 8 and now.minute < 50):
+                            log_queue.put("提示: 8:50前订阅可能失败(11200404)，交易所尚未推送快照")
+                        if exchange_id == 3:  # XTP_EXCHANGE_NQ (北交所)
+                            log_queue.put("提示: 公网测试环境无北交所行情，实盘UDP正常")
                         api.subscribe_market_data(symbol, exchange_id)
                         subscribed_symbols.add(f"{symbol}.{exchange_id}")
                 elif action == CMD_UNSUBSCRIBE:
