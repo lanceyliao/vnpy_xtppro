@@ -11,14 +11,12 @@ project(
   ],
 )
 
-# 导入 Python 模块
+# 导入模块
+fs = import('fs')
 py = import('python').find_installation(pure: false)
 py_dep = py.dependency()
-
-# 获取编译器信息
 cpp = meson.get_compiler('cpp')
 
-# 输出构建目标系统信息
 message('构建目标系统: ' + host_machine.system())
 
 # 初始化变量
@@ -84,17 +82,19 @@ py_ver = py.version()
 py_major = py_ver.split('.').get(0)
 py_minor = py_ver.split('.').get(1)
 
-# 尝试多种方式查找 Boost.Python
-boost_python_dep = dependency('', required: false)
-
-# 1. 尝试 pkg-config / cmake / meson dependency
-boost_python_names = [
+boost_python_lib_names = [
   'boost_python' + py_major + py_minor,     # boost_python310
   'boost_python' + py_major,                 # boost_python3
-  'boost_python-py' + py_major + py_minor,  # boost_python-py310
-  'Boost::python' + py_major + py_minor,    # cmake target
+  'boost_python3',
 ]
 
+# 1. 尝试 pkg-config / meson dependency
+boost_python_dep = dependency('', required: false)
+boost_python_names = [
+  'boost_python' + py_major + py_minor,
+  'boost_python' + py_major,
+  'boost_python-py' + py_major + py_minor,
+]
 foreach name : boost_python_names
   if not boost_python_dep.found()
     boost_python_dep = dependency(name, required: false)
@@ -103,11 +103,6 @@ endforeach
 
 # 2. 尝试编译器直接查找
 if not boost_python_dep.found()
-  boost_python_lib_names = [
-    'boost_python' + py_major + py_minor,
-    'boost_python' + py_major,
-    'boost_python3',
-  ]
   foreach name : boost_python_lib_names
     if not boost_python_dep.found()
       boost_python_dep = cpp.find_library(name, required: false)
@@ -115,47 +110,54 @@ if not boost_python_dep.found()
   endforeach
 endif
 
-# 3. Windows: 检查 vcpkg 安装路径
-if host_machine.system() == 'windows' and not boost_python_dep.found()
-  vcpkg_root = run_command('cmd', '/c', 'echo %VCPKG_ROOT%', check: false).stdout().strip()
-  if vcpkg_root != '' and vcpkg_root != '%VCPKG_ROOT%'
-    message('Trying vcpkg Boost at: ' + vcpkg_root)
-    vcpkg_include = vcpkg_root / 'installed/x64-windows/include'
-    vcpkg_lib = vcpkg_root / 'installed/x64-windows/lib'
-    if fs.is_dir(vcpkg_include)
-      include_dirs = include_dirs, include_directories(vcpkg_include)
-      foreach name : boost_python_lib_names
-        if not boost_python_dep.found()
-          boost_python_dep = cpp.find_library(name, dirs: [vcpkg_lib], required: false)
-        endif
-      endforeach
-    endif
-  endif
-
-  # Also check BOOST_ROOT
-  boost_root = run_command('cmd', '/c', 'echo %BOOST_ROOT%', check: false).stdout().strip()
-  if boost_root != '' and boost_root != '%BOOST_ROOT%' and not boost_python_dep.found()
-    message('Trying BOOST_ROOT at: ' + boost_root)
-    br_include = boost_root / 'include'
-    br_lib = boost_root / 'lib'
-    if fs.is_dir(br_include)
-      include_dirs = include_dirs, include_directories(br_include)
-      foreach name : boost_python_lib_names
-        if not boost_python_dep.found()
-          boost_python_dep = cpp.find_library(name, dirs: [br_lib], required: false)
-        endif
-      endforeach
-    endif
-  endif
-endif
-
-# 4. Linux: 检查 /usr/local
+# 3. Linux: 检查 /usr/local
 if host_machine.system() != 'windows' and not boost_python_dep.found()
   foreach name : boost_python_lib_names
     if not boost_python_dep.found()
       boost_python_dep = cpp.find_library(name, dirs: ['/usr/local/lib'], required: false)
     endif
   endforeach
+  # 额外 Boost 依赖
+  boost_thread_dep = dependency('boost_thread', required: false)
+  boost_system_dep = dependency('boost_system', required: false)
+else
+  boost_thread_dep = dependency('', required: false)
+  boost_system_dep = dependency('', required: false)
+endif
+
+# 4. Windows: 检查 vcpkg / BOOST_ROOT
+if host_machine.system() == 'windows' and not boost_python_dep.found()
+  # vcpkg 路径
+  vcpkg_root = get_option('prefix')  # fallback
+  vcpkg_inc = ''
+  vcpkg_lib = ''
+
+  # 尝试环境变量 VCPKG_ROOT
+  vcpkg_env = run_command('python3', '-c', 'import os; print(os.environ.get("VCPKG_ROOT",""))', check: false).stdout().strip()
+  if vcpkg_env != ''
+    vcpkg_inc = vcpkg_env / 'installed/x64-windows/include'
+    vcpkg_lib = vcpkg_env / 'installed/x64-windows/lib'
+  endif
+
+  # 尝试环境变量 BOOST_ROOT
+  if vcpkg_inc == ''
+    boost_env = run_command('python3', '-c', 'import os; print(os.environ.get("BOOST_ROOT",""))', check: false).stdout().strip()
+    if boost_env != ''
+      vcpkg_inc = boost_env / 'include'
+      vcpkg_lib = boost_env / 'lib'
+    endif
+  endif
+
+  # 如果找到了额外 include 路径，追加到 include_dirs
+  if vcpkg_inc != ''
+    boost_inc_dir = include_directories(vcpkg_inc)
+    include_dirs = [include_dirs, boost_inc_dir]
+    foreach name : boost_python_lib_names
+      if not boost_python_dep.found()
+        boost_python_dep = cpp.find_library(name, dirs: [vcpkg_lib], required: false)
+      endif
+    endforeach
+  endif
 endif
 
 if not boost_python_dep.found()
@@ -165,47 +167,40 @@ endif
 
 message('Using Boost.Python: ' + boost_python_dep.name())
 
-# Linux 额外 Boost 依赖
-if host_machine.system() != 'windows'
-  boost_thread_dep = dependency('boost_thread', required: false)
-  boost_system_dep = dependency('boost_system', required: false)
-else
-  boost_thread_dep = dependency('', required: false)
-  boost_system_dep = dependency('', required: false)
-endif
-
 # ---- 编译选项 ----
 extra_cpp_args += ['-DUSE_64BITS', '-DBUILD_XTP_MD', '-DBUILD_XTP_TD']
 
 # ---- 行情绑定 (vnxtpxquote) ----
+md_link_args = extra_link_args
+if host_machine.system() != 'windows'
+  md_link_args += ['-L' + lib_dir, '-lxtpxquoteapi', '-Wl,-rpath,$ORIGIN']
+endif
+
 md_module = py.extension_module(
   'vnxtpxquote',
   sources: ['vnpy_xtppro/api/source/vnxtpxquote.cpp'],
   include_directories: include_dirs,
   dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep],
   cpp_args: extra_cpp_args,
-  link_args: extra_link_args + (host_machine.system() != 'windows' ? [
-    '-L' + lib_dir,
-    '-lxtpxquoteapi',
-    '-Wl,-rpath,$ORIGIN',
-  ] : []),
+  link_args: md_link_args,
   install: true,
   install_rpath: install_rpath_value,
   subdir: 'vnpy_xtppro/api',
 )
 
 # ---- 交易绑定 (vnxtpxtrader) ----
+td_link_args = extra_link_args
+if host_machine.system() != 'windows'
+  td_link_args += ['-L' + lib_dir, '-lxtpxtraderapi', '-Wl,-rpath,$ORIGIN']
+endif
+
 td_module = py.extension_module(
   'vnxtpxtrader',
   sources: ['vnpy_xtppro/api/source/vnxtpxtrader.cpp'],
   include_directories: include_dirs,
   dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep],
   cpp_args: extra_cpp_args,
-  link_args: extra_link_args + (host_machine.system() != 'windows' ? [
-    '-L' + lib_dir,
-    '-lxtpxtraderapi',
-    '-Wl,-rpath,$ORIGIN',
-  ] : []),
+  link_args: td_link_args,
   install: true,
   install_rpath: install_rpath_value,
   subdir: 'vnpy_xtppro/api',
@@ -236,19 +231,11 @@ if host_machine.system() == 'windows'
     'vnpy_xtppro/api/libs/win64/xtpxquoteapi.dll',
     'vnpy_xtppro/api/libs/win64/xtpxtraderapi.dll',
   ]
-
-  install_data(
-    api_libs,
-    install_dir: py.get_install_dir() / 'vnpy_xtppro/api',
-  )
-else  # Linux
+  install_data(api_libs, install_dir: py.get_install_dir() / 'vnpy_xtppro/api')
+else
   api_libs = [
     'vnpy_xtppro/api/libs/linux_x86_64/libxtpxquoteapi.so',
     'vnpy_xtppro/api/libs/linux_x86_64/libxtpxtraderapi.so',
   ]
-
-  install_data(
-    api_libs,
-    install_dir: py.get_install_dir() / 'vnpy_xtppro/api',
-  )
+  install_data(api_libs, install_dir: py.get_install_dir() / 'vnpy_xtppro/api')
 endif
