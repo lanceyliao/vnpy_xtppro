@@ -261,8 +261,6 @@ python_files = [
   ['vnpy_xtppro/api/xtp_pro_md_api.py', 'vnpy_xtppro/api'],
   ['vnpy_xtppro/gateway/__init__.py', 'vnpy_xtppro/gateway'],
   ['vnpy_xtppro/gateway/xtp_pro_gateway.py', 'vnpy_xtppro/gateway'],
-  ['vnpy_xtppro/gateway/xtp_pro_md.py', 'vnpy_xtppro/gateway'],
-  ['vnpy_xtppro/gateway/bar_generator.py', 'vnpy_xtppro/gateway'],
 ]
 
 foreach file : python_files

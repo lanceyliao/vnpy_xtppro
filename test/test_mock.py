@@ -19,7 +19,7 @@ from vnpy.trader.constant import Exchange, Product
 from vnpy.trader.object import TickData, ContractData, SubscribeRequest
 
 from vnpy_xtppro.api.xtp_pro_md_api import XtpProMdApi
-from vnpy_xtppro.gateway.xtp_pro_md import (
+from vnpy_xtppro.gateway.xtp_pro_gateway import (
     EXCHANGE_XTP2VT,
     EXCHANGE_VT2XTP,
     PRODUCT_XTP2VT,

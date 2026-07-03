@@ -5,9 +5,10 @@ BarGenerator 单元测试
 - tick→分钟线合成
 - OHLCV 正确性
 - 分钟切换推送
-- 缺失 bar 补充
+- 缺失 bar 补充（统一走 on_bar，volume=0 标识）
 - 多合约并行
 - force_finish_all
+- 交易时段边界不补充
 """
 
 import pytest
@@ -18,7 +19,7 @@ from vnpy.trader.constant import Exchange, Interval
 from vnpy.trader.object import TickData, BarData
 from vnpy.trader.utility import ZoneInfo
 
-from vnpy_xtppro.gateway.bar_generator import BarGenerator
+from vnpy_xtppro.gateway.xtp_pro_gateway import BarGenerator
 
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
@@ -55,11 +56,9 @@ class TestBarGenerator:
 
     def setup_method(self):
         self.bars = []
-        self.gaps = []
         self.logs = []
         self.bg = BarGenerator(
             on_bar=lambda bar: self.bars.append(copy(bar)),
-            on_bar_gap=lambda bar: self.gaps.append(copy(bar)),
             write_log=lambda msg: self.logs.append(msg),
         )
 
@@ -134,11 +133,9 @@ class TestBarGapFilling:
 
     def setup_method(self):
         self.bars = []
-        self.gaps = []
         self.logs = []
         self.bg = BarGenerator(
             on_bar=lambda bar: self.bars.append(copy(bar)),
-            on_bar_gap=lambda bar: self.gaps.append(copy(bar)),
             write_log=lambda msg: self.logs.append(msg),
         )
 
@@ -152,7 +149,9 @@ class TestBarGapFilling:
         self.bg.update_tick(t2)
         self.bg.update_tick(t3)
 
-        assert len(self.gaps) == 0
+        # 无零量 gap bar
+        gap_bars = [b for b in self.bars if b.volume == 0]
+        assert len(gap_bars) == 0
 
     def test_single_minute_gap(self):
         """1 分钟缺失（跳过 1 分钟）"""
@@ -166,12 +165,12 @@ class TestBarGapFilling:
         self.bg.update_tick(t3)
 
         # 10:03 tick 触发推送 10:01 bar + 补充 10:02
-        # 需要再一个 tick 来触发 10:03 bar 的推送
         t4 = make_tick(dt=datetime(2023, 7, 3, 10, 4, 30, tzinfo=CHINA_TZ), last_price=10.4)
         self.bg.update_tick(t4)
 
-        # 检查是否有缺失补充
-        gap_minutes = [g.datetime.minute for g in self.gaps]
+        # 检查是否有零量 gap bar（volume=0 标识补充 bar）
+        gap_bars = [b for b in self.bars if b.volume == 0]
+        gap_minutes = [g.datetime.minute for g in gap_bars]
         assert 2 in gap_minutes, f"Expected gap at minute 2, got gaps at: {gap_minutes}"
 
     def test_multi_minute_gap(self):
@@ -188,16 +187,17 @@ class TestBarGapFilling:
         self.bg.update_tick(t4)
 
         # 10:05 bar 推送时检测 10:01→10:05 缺失
-        gap_minutes = sorted([g.datetime.minute for g in self.gaps])
+        gap_bars = [b for b in self.bars if b.volume == 0]
+        gap_minutes = sorted([g.datetime.minute for g in gap_bars])
         assert gap_minutes == [2, 3, 4], f"Expected gaps at [2,3,4], got: {gap_minutes}"
 
         # 缺失 bar 应为零量
-        for gap in self.gaps:
+        for gap in gap_bars:
             assert gap.volume == 0
             assert gap.turnover == 0
 
         # 缺失 bar 的价格应为上一根 bar 的收盘价
-        for gap in self.gaps:
+        for gap in gap_bars:
             assert gap.open_price == 10.1
             assert gap.close_price == 10.1
 
@@ -213,7 +213,8 @@ class TestBarGapFilling:
         self.bg.update_tick(t3)
         self.bg.update_tick(t4)
 
-        gap_dts = sorted([g.datetime for g in self.gaps])
+        gap_bars = [b for b in self.bars if b.volume == 0]
+        gap_dts = sorted([g.datetime for g in gap_bars])
         expected = [
             datetime(2023, 7, 3, 10, 2, 0, tzinfo=CHINA_TZ),
             datetime(2023, 7, 3, 10, 3, 0, tzinfo=CHINA_TZ),
@@ -221,16 +222,50 @@ class TestBarGapFilling:
         ]
         assert gap_dts == expected
 
+    def test_no_gap_across_sessions(self):
+        """跨交易时段不补充（早盘→午盘）"""
+        # 早盘 10:30 的 bar
+        t1 = make_tick(dt=datetime(2023, 7, 3, 10, 29, 30, tzinfo=CHINA_TZ), last_price=10.0)
+        t2 = make_tick(dt=datetime(2023, 7, 3, 10, 30, 30, tzinfo=CHINA_TZ), last_price=10.1)
+        # 午盘 13:00 的 tick（跳过了 10:31~12:59）
+        t3 = make_tick(dt=datetime(2023, 7, 3, 13, 0, 30, tzinfo=CHINA_TZ), last_price=10.2)
+        t4 = make_tick(dt=datetime(2023, 7, 3, 13, 1, 30, tzinfo=CHINA_TZ), last_price=10.3)
+
+        self.bg.update_tick(t1)
+        self.bg.update_tick(t2)
+        self.bg.update_tick(t3)
+        self.bg.update_tick(t4)
+
+        # 不应产生跨时段的 gap bar
+        gap_bars = [b for b in self.bars if b.volume == 0]
+        assert len(gap_bars) == 0, f"Should not gap-fill across sessions, got {len(gap_bars)} gap bars"
+
+    def test_no_gap_across_days(self):
+        """跨日不补充"""
+        # 昨日 14:59 的 bar
+        t1 = make_tick(dt=datetime(2023, 7, 3, 14, 58, 30, tzinfo=CHINA_TZ), last_price=10.0)
+        t2 = make_tick(dt=datetime(2023, 7, 3, 14, 59, 30, tzinfo=CHINA_TZ), last_price=10.1)
+        # 今日 9:30 的 tick
+        t3 = make_tick(dt=datetime(2023, 7, 4, 9, 30, 30, tzinfo=CHINA_TZ), last_price=10.2)
+        t4 = make_tick(dt=datetime(2023, 7, 4, 9, 31, 30, tzinfo=CHINA_TZ), last_price=10.3)
+
+        self.bg.update_tick(t1)
+        self.bg.update_tick(t2)
+        self.bg.update_tick(t3)
+        self.bg.update_tick(t4)
+
+        # 不应产生跨日的 gap bar
+        gap_bars = [b for b in self.bars if b.volume == 0]
+        assert len(gap_bars) == 0, f"Should not gap-fill across days, got {len(gap_bars)} gap bars"
+
 
 class TestMultiSymbol:
     """多合约并行测试"""
 
     def setup_method(self):
         self.bars = []
-        self.gaps = []
         self.bg = BarGenerator(
             on_bar=lambda bar: self.bars.append(copy(bar)),
-            on_bar_gap=lambda bar: self.gaps.append(copy(bar)),
         )
 
     def test_two_symbols_independent(self):
@@ -256,10 +291,8 @@ class TestForceFinish:
 
     def setup_method(self):
         self.bars = []
-        self.gaps = []
         self.bg = BarGenerator(
             on_bar=lambda bar: self.bars.append(copy(bar)),
-            on_bar_gap=lambda bar: self.gaps.append(copy(bar)),
         )
 
     def test_force_finish_pushes_pending_bar(self):

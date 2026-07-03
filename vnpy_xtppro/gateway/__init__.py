@@ -2,7 +2,6 @@
 XTP Pro 行情网关包
 """
 
-from .xtp_pro_gateway import XtpProGateway, get_default_setting
-from .bar_generator import BarGenerator
+from .xtp_pro_gateway import XtpProGateway, BarGenerator, get_default_setting
 
 __all__ = ["XtpProGateway", "BarGenerator", "get_default_setting"]

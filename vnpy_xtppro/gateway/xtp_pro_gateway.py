@@ -3,18 +3,24 @@ XTP Pro 行情网关
 
 VeighNa BaseGateway 适配层，驱动独立进程 MD worker，
 通过 multiprocessing.Queue 消费行情数据并推入 EventEngine。
+
+包含：
+- BarGenerator: tick→分钟线合成 + 缺失bar补充
+- XtpProGateway: 行情网关主类
+- 子进程 worker + 行情数据处理函数
 """
 
 import multiprocessing as mp
 import queue
 import threading
 import time
+import traceback
 from copy import copy
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
-from vnpy.trader.constant import Exchange
+from vnpy.trader.constant import Exchange, Interval, Product
 from vnpy.trader.event import EVENT_CONTRACT, EVENT_LOG, EVENT_TICK
 from vnpy.event.engine import Event
 from vnpy.trader.gateway import BaseGateway
@@ -27,28 +33,557 @@ from vnpy.trader.object import (
     SubscribeRequest,
     TickData,
 )
+from vnpy.trader.utility import get_folder_path, round_to, ZoneInfo
+
+from ..api.xtp_pro_md_api import XtpProMdApi
+
+# ------------------------------------------------------------------
+# 常量
+# ------------------------------------------------------------------
+
+CHINA_TZ = ZoneInfo("Asia/Shanghai")
+
+# 交易所映射（行情 exchange_id）
+EXCHANGE_XTP2VT: dict[int, Exchange] = {
+    1: Exchange.SSE,    # 上证
+    2: Exchange.SZSE,   # 深证
+}
+EXCHANGE_VT2XTP: dict[Exchange, int] = {v: k for k, v in EXCHANGE_XTP2VT.items()}
+
+# 产品类型映射
+PRODUCT_XTP2VT: dict[int, Product] = {
+    0: Product.EQUITY,
+    1: Product.INDEX,
+    2: Product.FUND,
+    3: Product.BOND,
+    4: Product.OPTION,
+    5: Product.EQUITY,
+    6: Product.FUND,
+}
+
+# 通讯协议
+PROTOCOL_VT2XTP: dict[str, int] = {
+    "TCP": 1,
+    "UDP": 2,
+}
+
+# 日志级别
+LOGLEVEL_VT2XTP: dict[str, int] = {
+    "FATAL": 0,
+    "ERROR": 1,
+    "WARNING": 2,
+    "INFO": 3,
+    "DEBUG": 4,
+    "TRACE": 5,
+}
+
+# 队列参数
+QUEUE_DRAIN_BATCH_SIZE = 2000
+QUEUE_DRAIN_IDLE_SLEEP = 0.01
+
+# 进程命令
+CMD_SUBSCRIBE = "subscribe"
+CMD_UNSUBSCRIBE = "unsubscribe"
+CMD_STOP = "stop"
+
+# 合约数据全局缓存
+symbol_contract_map: dict[str, ContractData] = {}
+
+# A股交易时段 (start_hour, start_min, end_hour, end_min)
+TRADING_SESSIONS = [
+    (9, 30, 11, 30),   # 早盘
+    (13, 0, 15, 0),    # 午盘
+]
 
 # 自定义事件类型（VeighNa 核心未内置 EVENT_BAR）
 EVENT_BAR = "eBar."
-from vnpy.trader.utility import get_folder_path, ZoneInfo
 
-from .xtp_pro_md import (
-    CMD_STOP,
-    CMD_SUBSCRIBE,
-    CMD_UNSUBSCRIBE,
-    EXCHANGE_VT2XTP,
-    EXCHANGE_XTP2VT,
-    LOGLEVEL_VT2XTP,
-    PROTOCOL_VT2XTP,
-    QUEUE_DRAIN_BATCH_SIZE,
-    QUEUE_DRAIN_IDLE_SLEEP,
-    _md_process_worker,
-    _normalize_queue_exception,
-    symbol_contract_map,
-)
+# ------------------------------------------------------------------
+# 交易时段辅助函数
+# ------------------------------------------------------------------
+
+def same_trading_session(dt1: datetime, dt2: datetime) -> bool:
+    """判断两个时间是否在同一交易时段内（同日 + 同时段）"""
+    if dt1.date() != dt2.date():
+        return False
+    t1 = dt1.hour * 60 + dt1.minute
+    t2 = dt2.hour * 60 + dt2.minute
+    for start_h, start_m, end_h, end_m in TRADING_SESSIONS:
+        start = start_h * 60 + start_m
+        end = end_h * 60 + end_m
+        if start <= t1 <= end and start <= t2 <= end:
+            return True
+    return False
+
+# ------------------------------------------------------------------
+# 辅助函数
+# ------------------------------------------------------------------
+
+def _normalize_queue_exception(exc: BaseException) -> bool:
+    """判断队列异常是否为正常的空/关闭"""
+    return isinstance(exc, (queue.Empty, EOFError, OSError, ValueError))
 
 
-CHINA_TZ = ZoneInfo("Asia/Shanghai")
+def _drain_commands(command_queue: mp.Queue) -> List[dict]:
+    """一次性排空命令队列"""
+    commands: List[dict] = []
+    while True:
+        try:
+            commands.append(command_queue.get_nowait())
+        except Exception as exc:
+            if _normalize_queue_exception(exc):
+                return commands
+            raise
+
+# ------------------------------------------------------------------
+# Bar 合成器
+# ------------------------------------------------------------------
+
+DB_TZ = ZoneInfo("Asia/Shanghai")
+
+
+class BarGenerator:
+    """
+    分钟线合成器
+
+    架构：
+    - update_tick: 每个 tick 到来时更新当前 bar
+    - 当分钟切换时，推送上一分钟完成的 bar
+    - 检测缺失 bar（断连导致），自动补充零量 bar
+    - 仅在同一交易时段内补充缺失 bar，跨时段不补充
+    - 通过 on_bar 回调推送合成后的 bar（正常 bar 和补充 bar 统一走 on_bar）
+    """
+
+    def __init__(
+        self,
+        on_bar: Callable[[BarData], None],
+        write_log: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """
+        Args:
+            on_bar: bar 推送回调（正常 + 补充的 bar 都会调用）
+            write_log: 日志回调（可选）
+        """
+        self.on_bar: Callable[[BarData], None] = on_bar
+        self.write_log: Callable[[str], None] = write_log or (lambda msg: None)
+
+        # 当前正在构建的 bar（按 vt_symbol 索引）
+        self.bars: Dict[str, Optional[BarData]] = {}
+
+        # 上一个 tick（用于计算增量成交额）
+        self.last_ticks: Dict[str, TickData] = {}
+
+        # 上一个 bar 的分钟 datetime（用于检测缺失）
+        self.last_dts: Dict[str, datetime] = {}
+
+        # 上一个完成的 bar（用于缺失补充）
+        self.last_bars: Dict[str, BarData] = {}
+
+    def update_tick(self, tick: TickData) -> None:
+        """基于 tick 合成分钟线
+
+        逻辑：
+        1. 检测分钟切换 → 推送上一分钟 bar
+        2. 创建或更新当前分钟 bar
+        3. 累加增量成交量和成交额
+        """
+        vt_symbol: str = tick.vt_symbol
+
+        # ---- 分钟切换检测 ----
+        last_dt: Optional[datetime] = self.last_dts.get(vt_symbol)
+        if not last_dt or last_dt.minute != tick.datetime.minute:
+            # 分钟已切换，推送上一分钟的 bar
+            bar: Optional[BarData] = self.bars.get(vt_symbol)
+            if bar:
+                bar.datetime = bar.datetime.replace(second=0, microsecond=0)
+                self.process_bar(bar)
+                self.bars[vt_symbol] = None
+
+        # ---- 创建或更新当前 bar ----
+        bar = self.bars.get(vt_symbol)
+        if not bar:
+            bar = BarData(
+                symbol=tick.symbol,
+                exchange=tick.exchange,
+                interval=Interval.MINUTE,
+                datetime=tick.datetime.replace(second=0, microsecond=0),
+                gateway_name=tick.gateway_name,
+                open_price=tick.last_price,
+                high_price=tick.last_price,
+                low_price=tick.last_price,
+                close_price=tick.last_price,
+                open_interest=tick.open_interest,
+            )
+            self.bars[vt_symbol] = bar
+        else:
+            bar.high_price = max(bar.high_price, tick.last_price)
+            bar.low_price = min(bar.low_price, tick.last_price)
+            bar.close_price = tick.last_price
+            bar.open_interest = tick.open_interest
+
+        # ---- 累加增量成交量/额 ----
+        bar.volume += tick.last_volume
+        last_tick: Optional[TickData] = self.last_ticks.get(vt_symbol)
+        if last_tick:
+            bar.turnover += max(tick.turnover - last_tick.turnover, 0)
+
+        self.last_ticks[vt_symbol] = tick
+        self.last_dts[vt_symbol] = tick.datetime
+
+    def process_bar(self, bar: BarData) -> None:
+        """处理完成的 bar，包括记录和补充缺失
+
+        缺失补充逻辑：
+        - 仅在同一交易时段内补充（same_trading_session）
+        - 跨时段（早盘→午盘、昨日→今日）不补充
+        - 首根 bar（无 last_bar）不补充
+        - 缺失 bar 用 last_bar 的 close_price 构造零量 bar
+        """
+        try:
+            last_bar: Optional[BarData] = self.last_bars.get(bar.vt_symbol)
+
+            if last_bar:
+                self.write_log(
+                    f"process_bar last:{last_bar.datetime} now:{bar.datetime}"
+                )
+
+                # 统一时区
+                if last_bar.datetime.tzinfo is None:
+                    last_bar_datetime = last_bar.datetime.replace(tzinfo=DB_TZ)
+                else:
+                    last_bar_datetime = last_bar.datetime
+
+                if bar.datetime.tzinfo is None:
+                    bar_datetime = bar.datetime.replace(tzinfo=DB_TZ)
+                else:
+                    bar_datetime = bar.datetime
+
+                minutes_diff: int = int(
+                    (bar_datetime - last_bar_datetime).total_seconds() / 60
+                )
+
+                if minutes_diff > 1 and same_trading_session(last_bar_datetime, bar_datetime):
+                    # 仅在同一交易时段内补充缺失 bar
+                    for i in range(1, minutes_diff):
+                        gap_dt = last_bar_datetime + timedelta(minutes=i)
+                        gap_bar = BarData(
+                            symbol=bar.symbol,
+                            exchange=bar.exchange,
+                            interval=Interval.MINUTE,
+                            datetime=gap_dt,
+                            gateway_name=bar.gateway_name,
+                            open_price=last_bar.close_price,
+                            high_price=last_bar.close_price,
+                            low_price=last_bar.close_price,
+                            close_price=last_bar.close_price,
+                            volume=0,
+                            turnover=0,
+                            open_interest=last_bar.open_interest,
+                        )
+                        self.write_log(
+                            f"补充缺失bar: {gap_bar.vt_symbol}, "
+                            f"时间: {gap_bar.datetime}, "
+                            f"价格: {gap_bar.close_price}"
+                        )
+                        # 统一走 on_bar（不再区分 on_bar_gap）
+                        self.on_bar(gap_bar)
+
+            # 记录当前 bar
+            self.on_bar(bar)
+            self.last_bars[bar.vt_symbol] = bar
+
+        except Exception:
+            msg = f"process_bar触发异常已停止\n{traceback.format_exc()}"
+            self.write_log(msg)
+
+    def force_finish_all(self) -> None:
+        """强制完成所有未推送的 bar（连接断开时调用）"""
+        for vt_symbol, bar in list(self.bars.items()):
+            if bar:
+                bar.datetime = bar.datetime.replace(second=0, microsecond=0)
+                self.on_bar(bar)
+                self.last_bars[vt_symbol] = bar
+                self.bars[vt_symbol] = None
+
+# ------------------------------------------------------------------
+# 子进程行情数据处理
+# ------------------------------------------------------------------
+
+# 子进程内缓存：上一 tick 累计成交量（用于计算 last_volume 增量）
+_symbol_last_cum_volume: Dict[str, float] = {}
+
+
+def _on_depth_market_data(
+    data: dict,
+    bid1_qty_list: list,
+    bid1_count: int,
+    max_bid1_count: int,
+    ask1_qty_list: list,
+    ask1_count: int,
+    max_ask1_count: int,
+    tick_queue: mp.Queue,
+    bar_gen: Optional[BarGenerator],
+) -> None:
+    """处理深度行情推送，转换为 TickData 放入队列，并合成 bar"""
+    try:
+        timestamp: str = str(data["data_time"])
+        dt: datetime = datetime.strptime(timestamp, "%Y%m%d%H%M%S%f")
+        dt = dt.replace(tzinfo=CHINA_TZ)
+
+        exchange = EXCHANGE_XTP2VT.get(data["exchange_id"])
+        if exchange is None:
+            return
+
+        tick: TickData = TickData(
+            symbol=data["ticker"],
+            exchange=exchange,
+            datetime=dt,
+            volume=data["qty"],
+            turnover=data["turnover"],
+            last_price=data["last_price"],
+            limit_up=data["upper_limit_price"],
+            limit_down=data["lower_limit_price"],
+            open_price=data["open_price"],
+            high_price=data["high_price"],
+            low_price=data["low_price"],
+            pre_close=data["pre_close_price"],
+            gateway_name="XTP_PRO",
+        )
+
+        # 五档买卖盘
+        tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data["bid"][0:5]
+        tick.ask_price_1, tick.ask_price_2, tick.ask_price_3, tick.ask_price_4, tick.ask_price_5 = data["ask"][0:5]
+        tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data["bid_qty"][0:5]
+        tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data["ask_qty"][0:5]
+
+        # 基于合约最小价格跳动四舍五入
+        contract: ContractData = symbol_contract_map.get(tick.vt_symbol, None)
+        if contract:
+            pricetick: float = contract.pricetick
+            tick.last_price = round_to(data["last_price"], pricetick)
+            tick.limit_up = round_to(data["upper_limit_price"], pricetick)
+            tick.limit_down = round_to(data["lower_limit_price"], pricetick)
+            tick.open_price = round_to(data["open_price"], pricetick)
+            tick.high_price = round_to(data["high_price"], pricetick)
+            tick.low_price = round_to(data["low_price"], pricetick)
+            tick.pre_close = round_to(data["pre_close_price"], pricetick)
+
+            for i in range(5):
+                setattr(tick, f"bid_price_{i+1}", round_to(data["bid"][i], pricetick))
+                setattr(tick, f"ask_price_{i+1}", round_to(data["ask"][i], pricetick))
+
+            tick.name = contract.name
+
+        # 计算 last_volume（增量成交量 = 当前累计 - 上次累计）
+        cum_volume: float = data["qty"]
+        last_cum: float = _symbol_last_cum_volume.get(tick.vt_symbol, 0)
+        tick.last_volume = max(cum_volume - last_cum, 0)
+        _symbol_last_cum_volume[tick.vt_symbol] = cum_volume
+
+        tick_queue.put(tick)
+
+        # tick → bar 合成（在子进程中完成）
+        if bar_gen is not None:
+            bar_gen.update_tick(tick)
+    except Exception:
+        pass  # 行情处理不应阻塞
+
+
+def _on_query_all_tickers(
+    data: dict,
+    error: dict,
+    last: bool,
+    tick_queue: mp.Queue,
+) -> None:
+    """处理合约查询回报，转换为 ContractData 放入队列"""
+    try:
+        if not data or not data.get("ticker"):
+            return
+
+        exchange = EXCHANGE_XTP2VT.get(data["exchange_id"])
+        if exchange is None:
+            return
+
+        contract: ContractData = ContractData(
+            symbol=data["ticker"],
+            exchange=exchange,
+            name=data.get("ticker_name", ""),
+            product=PRODUCT_XTP2VT.get(data.get("ticker_type", 0), Product.EQUITY),
+            size=1,
+            pricetick=data.get("price_tick", 0.01),
+            min_volume=data.get("buy_qty_unit", 1),
+            gateway_name="XTP_PRO",
+        )
+
+        # 通过特殊标记传递合约数据
+        tick_queue.put(("contract", contract, last))
+    except Exception:
+        pass
+
+
+# ------------------------------------------------------------------
+# 子进程 worker
+# ------------------------------------------------------------------
+
+def _md_process_worker(
+    userid: str,
+    password: str,
+    client_id: int,
+    server_ip: str,
+    server_port: int,
+    protocol: int,
+    log_level: int,
+    config_file: str,
+    tick_queue: mp.Queue,
+    bar_queue: mp.Queue,
+    log_queue: mp.Queue,
+    command_queue: mp.Queue,
+    stop_event: mp.Event,
+) -> None:
+    """
+    行情子进程 worker
+
+    在独立进程中运行 XtpProMdApi，接收订阅命令，推送行情数据。
+    tick → BarGenerator → bar_queue（分钟线）
+    tick_queue 仅用于合约数据传递。
+    """
+    api: Optional[XtpProMdApi] = None
+    subscribed_symbols: Set[str] = set()
+
+    # Bar 合成器：tick → 分钟 bar（统一 on_bar，无 on_bar_gap）
+    bar_gen = BarGenerator(
+        on_bar=lambda bar: bar_queue.put(bar),
+        write_log=lambda msg: log_queue.put(msg),
+    )
+
+    try:
+        api = XtpProMdApi()
+
+        # 重连控制
+        disconnected: bool = False
+        reconnect_delay: float = 5.0  # 重连等待秒数
+
+        # 设置回调
+        def _on_disconnected(reason: int) -> None:
+            nonlocal disconnected
+            disconnected = True
+            log_queue.put(f"行情连接断开, 原因: {reason}, 将在 {reconnect_delay}s 后重连")
+            bar_gen.force_finish_all()
+
+        api.on_disconnected = _on_disconnected
+        api.on_error = lambda error: log_queue.put(f"行情错误: {error}")
+        api.on_sub_market_data = lambda data, error, last: None
+        api.on_depth_market_data = lambda data, bql, bc, mbc, aql, ac, mac: _on_depth_market_data(
+            data, bql, bc, mbc, aql, ac, mac, tick_queue, bar_gen
+        )
+        api.on_query_all_tickers = lambda data, error, last: _on_query_all_tickers(
+            data, error, last, tick_queue
+        )
+        api.on_tick_by_tick = lambda data: None  # 可扩展
+
+        # 连接
+        api.connect(
+            userid, password, client_id,
+            server_ip, server_port,
+            protocol, log_level, config_file,
+        )
+        log_queue.put(f"XTP Pro 行情子进程已连接 {server_ip}:{server_port}")
+
+        # 查询合约
+        for exchange_id in EXCHANGE_XTP2VT:
+            api.query_all_tickers(exchange_id)
+        log_queue.put("已发起合约查询")
+
+        # 启动 API 回调线程
+        api.init()
+
+        # 主循环：处理命令 + 重连
+        while not stop_event.is_set():
+            # ---- 重连逻辑 ----
+            if disconnected:
+                time.sleep(reconnect_delay)
+                if stop_event.is_set():
+                    break
+                try:
+                    api.close()
+                except Exception:
+                    pass
+
+                log_queue.put(f"正在重连 {server_ip}:{server_port} ...")
+                try:
+                    api = XtpProMdApi()
+                    api.on_disconnected = _on_disconnected
+                    api.on_error = lambda error: log_queue.put(f"行情错误: {error}")
+                    api.on_sub_market_data = lambda data, error, last: None
+                    api.on_depth_market_data = lambda data, bql, bc, mbc, aql, ac, mac: _on_depth_market_data(
+                        data, bql, bc, mbc, aql, ac, mac, tick_queue, bar_gen
+                    )
+                    api.on_query_all_tickers = lambda data, error, last: _on_query_all_tickers(
+                        data, error, last, tick_queue
+                    )
+                    api.on_tick_by_tick = lambda data: None
+
+                    api.connect(
+                        userid, password, client_id,
+                        server_ip, server_port,
+                        protocol, log_level, config_file,
+                    )
+                    api.init()
+                    disconnected = False
+                    log_queue.put(f"重连成功 {server_ip}:{server_port}")
+
+                    # 重新查询合约
+                    for exchange_id in EXCHANGE_XTP2VT:
+                        api.query_all_tickers(exchange_id)
+                    log_queue.put("重连后已发起合约查询")
+
+                    # 重新订阅所有合约
+                    for sym in list(subscribed_symbols):
+                        # sym 格式: "symbol.exchange_id"，需要拆分
+                        parts = sym.split(".")
+                        if len(parts) == 2:
+                            api.subscribe_market_data(parts[0], int(parts[1]))
+                    if subscribed_symbols:
+                        log_queue.put(f"重连后已重新订阅 {len(subscribed_symbols)} 个合约")
+
+                except Exception as e:
+                    log_queue.put(f"重连失败: {e}, 将在 {reconnect_delay}s 后重试")
+
+            # ---- 处理命令 ----
+            for command in _drain_commands(command_queue):
+                action = command.get("action")
+                if action == CMD_STOP:
+                    return
+                elif action == CMD_SUBSCRIBE:
+                    symbol = command["symbol"]
+                    exchange_id = command["exchange_id"]
+                    if symbol not in subscribed_symbols:
+                        api.subscribe_market_data(symbol, exchange_id)
+                        subscribed_symbols.add(f"{symbol}.{exchange_id}")
+                elif action == CMD_UNSUBSCRIBE:
+                    symbol = command["symbol"]
+                    exchange_id = command["exchange_id"]
+                    key = f"{symbol}.{exchange_id}"
+                    if key in subscribed_symbols:
+                        api.unsubscribe_market_data(symbol, exchange_id)
+                        subscribed_symbols.discard(key)
+
+            time.sleep(0.01)  # 避免 CPU 空转
+
+    except Exception as e:
+        log_queue.put(f"行情子进程异常: {e}")
+    finally:
+        if api:
+            try:
+                api.close()
+            except Exception:
+                pass
+        log_queue.put("行情子进程已终止")
+
+
+# ------------------------------------------------------------------
+# 网关主类
+# ------------------------------------------------------------------
 
 DEFAULT_SERVER = "122.112.252.150"
 DEFAULT_PORT = 3002
@@ -200,7 +735,7 @@ class XtpProGateway(BaseGateway):
     def _drain_loop(self) -> None:
         """主进程 drain 循环：从队列消费行情数据，推入 EventEngine"""
         while self._drain_active:
-            # 消费行情队列（tick 仅用于合约数据，行情走 bar 通道）
+            # 消费行情队列（tick 用于合约数据 + 原始 tick 推送）
             batch_count: int = 0
             while batch_count < QUEUE_DRAIN_BATCH_SIZE:
                 try:
@@ -250,12 +785,8 @@ class XtpProGateway(BaseGateway):
     def _process_bar_item(self, item: Any) -> None:
         """处理 bar 队列中的项目，推 EVENT_BAR"""
         if isinstance(item, BarData):
-            # 正常 bar 或补充 bar
+            # 正常 bar 和补充 bar 统一走 on_bar
             self.on_bar(copy(item))
-        elif isinstance(item, tuple) and len(item) == 2 and item[0] == "bar_gap":
-            # 缺失 bar 告警（仍推送，策略可区分处理）
-            _, bar = item
-            self.on_bar(copy(bar))
 
     # ------------------------------------------------------------------
     # 事件推送

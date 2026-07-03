@@ -24,7 +24,7 @@ def test_api_instantiation():
 
 def test_exchange_mapping():
     """测试交易所映射"""
-    from vnpy_xtppro.gateway.xtp_pro_md import EXCHANGE_XTP2VT, EXCHANGE_VT2XTP
+    from vnpy_xtppro.gateway.xtp_pro_gateway import EXCHANGE_XTP2VT, EXCHANGE_VT2XTP
     from vnpy.trader.constant import Exchange
 
     assert EXCHANGE_XTP2VT[1] == Exchange.SSE
@@ -36,7 +36,7 @@ def test_exchange_mapping():
 
 def test_protocol_mapping():
     """测试协议映射"""
-    from vnpy_xtppro.gateway.xtp_pro_md import PROTOCOL_VT2XTP
+    from vnpy_xtppro.gateway.xtp_pro_gateway import PROTOCOL_VT2XTP
     assert PROTOCOL_VT2XTP["TCP"] == 1
     assert PROTOCOL_VT2XTP["UDP"] == 2
     print("✓ 协议映射测试通过")
@@ -44,7 +44,7 @@ def test_protocol_mapping():
 
 def test_loglevel_mapping():
     """测试日志级别映射"""
-    from vnpy_xtppro.gateway.xtp_pro_md import LOGLEVEL_VT2XTP
+    from vnpy_xtppro.gateway.xtp_pro_gateway import LOGLEVEL_VT2XTP
     assert LOGLEVEL_VT2XTP["INFO"] == 3
     assert LOGLEVEL_VT2XTP["DEBUG"] == 4
     print("✓ 日志级别映射测试通过")
