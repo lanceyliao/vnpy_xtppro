@@ -68,48 +68,46 @@ jobs:
         if: runner.os == 'Windows'
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: ${{ matrix.python-version }}
+          auto-activate-base: false
           channels: conda-forge,defaults
           channel-priority: strict
-          activate-environment: build
-          auto-activate-base: false
 
       - name: Install Boost.Python via conda-forge (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Install pre-built Boost from conda-forge (fast, no compilation)
+          # Install pre-built Boost into base env (just for the files, not for Python)
           conda install -y -c conda-forge libboost-python boost-cpp
 
-          # Set environment variables for meson
-          $condaPrefix = conda info --base
-          $envPath = "$condaPrefix\envs\build"
+          # conda base env path
+          $condaBase = conda info --base
 
           # conda-forge layout: Library/include + Library/lib
-          $boostInclude = "$envPath\Library\include"
-          $boostLib = "$envPath\Library\lib"
+          $boostInclude = "$condaBase\Library\include"
+          $boostLib = "$condaBase\Library\lib"
 
           Write-Host "Boost include: $boostInclude"
           Write-Host "Boost lib: $boostLib"
 
-          # Verify files exist
+          # Verify
           if (Test-Path "$boostInclude\boost") {
-            Write-Host "✅ Boost headers found"
+            Write-Host "✅ Boost headers found at $boostInclude"
           } else {
+            Write-Host "❌ Boost headers NOT found at $boostInclude"
             # Try alternative layout
-            $boostInclude = "$envPath\include"
-            $boostLib = "$envPath\lib"
-            Write-Host "Trying alternative: $boostInclude"
+            $boostInclude = "$condaBase\include"
+            $boostLib = "$condaBase\lib"
+            if (Test-Path "$boostInclude\boost") {
+              Write-Host "✅ Boost headers found at alternative: $boostInclude"
+            }
           }
 
           # List boost_python libs
-          Get-ChildItem "$boostLib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
           Get-ChildItem "$boostLib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
 
           # Export for meson
           echo "BOOST_INCLUDE=$boostInclude" >> $env:GITHUB_ENV
           echo "BOOST_LIB=$boostLib" >> $env:GITHUB_ENV
-          echo "CONDA_ENV_PATH=$envPath" >> $env:GITHUB_ENV
 
       - name: Set up MSVC dev environment (Windows)
         if: runner.os == 'Windows'
@@ -128,7 +126,18 @@ jobs:
           CC: cl
           CXX: cl
         run: |
-          python -m build --wheel
+          # Ensure we use setup-python's Python, not conda's
+          # setup-python puts its Python first in PATH, but conda may override
+          $setupPyDir = "C:\hostedtoolcache\windows\Python\${{ matrix.python-version }}.*\x64"
+          $setupPy = (Get-ChildItem "$setupPyDir\python.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          if ($setupPy) {
+            Write-Host "Using setup-python: $setupPy"
+            & $setupPy -m pip install build wheel setuptools meson-python meson ninja 2>$null
+            & $setupPy -m build --wheel
+          } else {
+            Write-Host "Falling back to python in PATH"
+            python -m build --wheel
+          }
 
       # ---- Validate ----
       - name: Validate Linux wheel exists
