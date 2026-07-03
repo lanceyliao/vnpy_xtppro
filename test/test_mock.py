@@ -304,6 +304,8 @@ def test_drain_commands():
     for i in range(5):
         cmd_queue.put({"action": "test", "idx": i})
 
+    # 短暂等待确保所有 item 已入队（mp.Queue 在 spawn 模式下可能有延迟）
+    time.sleep(0.05)
     commands = _drain_commands(cmd_queue)
     assert len(commands) == 5
     assert commands[0]["idx"] == 0

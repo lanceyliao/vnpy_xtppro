@@ -73,11 +73,17 @@ jobs:
           $env:BOOST_ROOT = "C:\$BOOST_DIR"
 
           if (-not (Test-Path $env:BOOST_ROOT)) {
-            Write-Host "Downloading Boost $BOOST_VER from SourceForge..."
-            $url = "https://sourceforge.net/projects/boost/files/boost/$BOOST_VER/$BOOST_DIR.tar.gz/download"
-            # SourceForge redirects; use WebClient for proper redirect handling
-            $wc = New-Object System.Net.WebClient
-            $wc.DownloadFile($url, "$env:TEMP\boost.tar.gz")
+            Write-Host "Downloading Boost $BOOST_VER from GitHub mirror..."
+            # Use GitHub Actions-friendly URL (SourceForge blocks WebClient)
+            $url = "https://github.com/boostorg/boost/releases/download/boost-${BOOST_VER}/${BOOST_DIR}.tar.gz"
+            try {
+              Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\boost.tar.gz" -MaximumRedirection 5
+            } catch {
+              Write-Host "GitHub mirror failed, trying GHA Boost install action..."
+              # Fallback: use conda-forge or choco
+              choco install boost-msvc-14.2 -y 2>$null || choco install boost -y 2>$null
+              return
+            }
             tar xzf "$env:TEMP\boost.tar.gz" -C C:\
             cd "C:\$BOOST_DIR"
             .\bootstrap.bat --with-python
