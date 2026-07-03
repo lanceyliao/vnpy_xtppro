@@ -1,0 +1,830 @@
+XTP-Pro API文档
+Skip to content
+XTP-Pro API文档
+Search      K
+Main Navigation       业务列表
+Appearance
+Menu
+Return to top
+Sidebar Navigation
+快速入门
+行情XQuote-API使用指南QuickStart
+交易XTrader-API使用指南QuickStart
+算法XAlgo-API使用指南QuickStart
+升级使用说明
+从XTP行情到XTP-Pro行情API的变化
+从XTP交易到XTP-Pro交易API的变化
+接口使用说明
+API接口说明与示例代码
+算法API接口说明与示例代码
+范例和教程
+关于L2行情数据回补功能的使用说明
+行情XQuote-API断线后应对措施
+交易分页查询示例代码
+资金划拨接口的示例代码
+新股申购逻辑示例代码
+配股逻辑示例代码
+Pro行情旧版配置文件参数说明
+帮助文档
+行情服务接入前指引
+API常见问题
+错误代码速查表
+Python版本SDK编译库说明
+算法流控及母单参数类型说明
+算法流控及母单参数示例
+订单的状态机图
+页面导航
+XTP Pro行情服务接入前指引
+目录
+1. 行情接入要点概述
+1.1. 行情概述
+1.2. 接入要点
+2. 基础操作
+2.1. 登录
+2.2. 查询
+2.3. 订阅
+2.4. 推送
+2.5. 回补
+3. 数据结构及字段含义
+3.1. 行情快照（XTPMD）赋值字段及含义
+3.2. 逐笔（XTPTBT）赋值字段及含义
+3.3. 订单薄（XTPOB）赋值字段及含义
+4. FAQ
+4.1. 公网测试环境
+4.2. TCP推送方式及问题排查
+4.3. 内网生产环境
+4.4. UDP（组播）推送方式及问题排查
+4.5. 行情数据更新频率
+4.6. 丢包问题API日志排查
+4.7. 对seq is discrete N to M的解释
+4.8. 其它问题
+1. 行情接入要点概述   ​
+1.1. 行情概述  ​
+（1）XTP-Pro是中泰自主开发的行情解码、数据推送的服务器。
+（2）支持的行情源包括SHL1，SHL2，SZL1，SZL2行情、北交所行情。
+（3）用户可以通过API获取股票、基金、债券、指数、指数通、港股通、期权行情。
+（4）XTP Pro只提供实时行情，不提供历史行情。
+（5）行情推送方式有两种：生产环境使用UDP（组播）推送，测试环境使用TCP推送。
+（6）推送的数据包括：行情快照、买一卖一委托队列、逐笔、订单薄。
+（7）XTP Pro行情提供按市场订阅和按股票代码订阅两种模式。
+1.2. 接入要点  ​
+（1）因为实盘的数据量，比公网测试环境的数据量大得多，所以用户在使用实盘行情用于交易前，一定要在实盘上做接入测试。
+（2）公网测试环境，因为带宽有限，而且是TCP连接，订阅太多时会造成网路堵塞，堵塞严重时甚至断线，所以我们做了订阅数量限制。
+如果是单订阅，单个市场订阅数量上限是100只，沪深2个市场总共200只。
+如果是全市场订阅，沪深2个市场只推送共7只合约。
+（3）请下载最新的API登录行情服务器，下载网址： https://xtp.zts.com.cn/service/download/info?id=1&type=downloadProducts。
+2. 基础操作   ​
+2.1. 登录  ​
+（1）XTP-Pro实盘环境，必须在Login之前调用SetConfigFile()设置行情接收的配置文件，如果不调用，将无法获取行情。
+cpp
+///设置行情接收的配置文件
+///  @return   设置配置文件是否成功，true-成功，false-失败，需要检查配置文件是否正确
+///  @param   filename   包含绝对路径的配置文件名
+///  @remark   此函数必须在Login之前调用，如果不调用，将无法获取行情
+virtual   bool   SetConfigFile  (  const   char*   filename  )   =   0  ;
+（2）API使用Login()函数进行登录。Login()函数的sock_type参数，决定了API接收更新数据的方式。请务必与行情服务器一致，否则会收不到行情更新数据。
+cpp
+///用户登录请求
+///  @return   登录是否成功，“0”表示登录成功，“-1”表示连接服务器出错，此时用户可以调用GetApiLastError()来获取错误代码，“-2”表示已存在连接，不允许重复登录，如果需要重连，请先logout，“-3”表示输入有错误
+///  @param   ip   服务器ip地址，类似“127.0.0.1”
+///  @param   port   服务器端口号
+///  @param   user   登录用户名
+///  @param   password   登录密码
+///  @param   sock_type   “1”代表TCP，“2”代表UDP
+///  @param   local_ip   本地网卡地址，类似“127.0.0.1”
+///  @remark   此函数为同步阻塞式，不需要异步等待登录成功，当函数返回即可进行后续操作，此api只能有一个连接
+virtual   int   Login  (  const   char*   ip  ,   int   port  ,   const   char*   user  ,   const   char*   password  ,   XTP_PROTOCOL_TYPE   sock_type  ,   const   char*   local_ip   =   NULL  )   =   0  ;
+（3）API日志级别
+cpp
+///创建QuoteApi
+///  @param   client_id   （必须输入）用于区分同一用户的不同客户端，由用户自定义
+///  @param   save_file_path   （必须输入）存贮订阅信息文件的目录，请设定一个有可写权限的真实存在的路径，如果路径不存在的话，可能会因为写冲突而造成断线
+///  @param   log_level   日志输出级别
+///  @param   udpseq_output   udpseq异步日志是否输出标识，默认为true，如果不想输出异步日志，请设置此参数为false
+///  @return   创建出的UserApi
+///  @remark   如果一个账户需要在多个客户端登录，请使用不同的client_id，系统允许一个账户同时登录多个客户端，但是对于同一账户，相同的client_id只能保持一个session连接，后面的登录在前一个session存续期间，无法连接
+static   QuoteApi   *  CreateQuoteApi  (  uint8_t   client_id  ,   const   char   *  save_file_path  ,   XTP_LOG_LEVEL   log_level  =  XTP_LOG_LEVEL_DEBUG,   bool   udpseq_output   =   true  );
+可以通过CreateQuoteApi()的log_level参数来调整API的日志级别，默认为DEBUG。但DEBUG级别的日志比较多，请慎重使用。
+（4）一个账号在多个客户端登录
+XTP-Pro行情允许一个账号在多个客户端同时登录，并且CreateQuoteApi()的client_id参数可以设置为相同的值，不会报错重复登录。
+2.2. 查询  ​
+（1）查询沪深2市可交易合约静态信息
+cpp
+///获取沪深2市当前交易日合约部分静态信息
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+///  @param   exchange_id   交易所代码，必须提供 1-上海 2-深圳
+virtual   int   QueryAllTickers  (  XTP_EXCHANGE_TYPE   exchange_id  )   =   0  ;
+cpp
+///查询合约部分静态信息的应答
+///  @param   ticker_info   合约部分静态信息
+///  @param   error_info   查询合约部分静态信息时发生错误时返回的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次查询合约部分静态信息的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+virtual   void   OnQueryAllTickers  (  XTPQSI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  ) { };
+调用QueryAllTickers()，查询对应市场可交易合约（股票/基金/债券/期权）基本信息。
+行情服务器内部对从数据库查询的到ticker进行过滤，过滤条件为(trade_status=0)，所以该接口，查询不到指数的信息。
+当行情服务器返回数据时，OnQueryAllTickers()函数被调用（异步接口）。
+注意：
+目前的生产环境，把停牌股票的trade_status配置成了0，即该接口也返回停牌股票。
+返回的数据类型列表:
+返回类型  含义  备注
+XTP_QUOTE_TICKER_TYPE_STOCK(0)  普通股票  主板/中小板/创业板
+XTP_QUOTE_TICKER_TYPE_INDEX(1)  指数  本接口不返回指数
+XTP_QUOTE_TICKER_TYPE_FUND(2)  基金  ETF/分级基金子基金/深交所仅申赎基金/上交所货币基金/深交所货币基金
+XTP_QUOTE_TICKER_TYPE_BOND(3)  债券  国债/企业债/公司债/转换债券/国债逆回购
+XTP_QUOTE_TICKER_TYPE_OPTION(4)  期权  个股期权/ETF期权
+XTP_QUOTE_TICKER_TYPE_TECH_STOCK(5)  科创版  科创板股票（上海）
+XTP_QUOTE_TICKER_TYPE_UNKNOWN(6)  未知类型  客户应该过滤掉返回类型为6的ticker
+（2）查询沪深2市所有合约的详细静态信息
+cpp
+///获取沪深2市所有合约的详细静态信息，包括指数等非可交易的，不包括新三板
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+///  @param   exchange_id   交易所代码，必须提供 1-上海 2-深圳
+virtual   int   QueryAllTickersFullInfo  (  XTP_EXCHANGE_TYPE   exchange_id  )   =   0  ;
+cpp
+///查询沪深2市合约完整静态信息的应答
+///  @param   ticker_info   合约完整静态信息
+///  @param   error_info   查询合约完整静态信息时发生错误时返回的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次查询合约完整静态信息的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+virtual   void   OnQueryAllTickersFullInfo  (  XTPQFI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  ) { };
+（3）查询新三板所有合约的详细静态信息
+cpp
+///获取新三板所有合约的详细静态信息，包括指数等非可交易的
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+virtual   int   QueryAllNQTickersFullInfo  ()   =   0  ;
+cpp
+///查询新三板合约完整静态信息的应答
+///  @param   ticker_info   合约完整静态信息
+///  @param   error_info   查询合约完整静态信息时发生错误时返回的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次查询合约完整静态信息的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+virtual   void   OnQueryAllNQTickersFullInfo  (  XTPNQFI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  ) { };
+（4）查询合约的最新价格接口
+cpp
+///获取合约的最新价格信息
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+///  @param   ticker   合约ID数组，注意合约代码必须以'\0'结尾，不包含空格
+///  @param   count   要查询的合约个数
+///  @param   exchange_id   交易所代码
+virtual   int   QueryTickersPriceInfo  (  char   *  ticker  [],   int   count  ,   XTP_EXCHANGE_TYPE   exchange_id  )   =   0  ;
+cpp
+///获取所有合约的最新价格信息
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+///  @param   exchange_id   表示当前全查询的市场，必须指定，仅支持单市场查询
+virtual   int   QueryAllTickersPriceInfo  (  XTP_EXCHANGE_TYPE   exchange_id  )   =   0  ;
+cpp
+///查询合约的最新价格信息应答
+///  @param   ticker_info   合约的最新价格信息
+///  @param   error_info   查询合约的最新价格信息时发生错误时返回的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次查询的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+virtual   void   OnQueryTickersPriceInfo  (  XTPTPI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  ) { };
+该接口可以返回股票/基金/债券/期权等最新价格。
+（5）查询合约的最新快照信息
+cpp
+///获取合约的最新快照信息
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+///  @param   ticker   合约ID数组，注意合约代码必须以'\0'结尾，不包含空格
+///  @param   count   要查询的合约个数
+///  @param   exchange_id   交易所代码
+virtual   int   QueryTickersLatestMarketData  (  char   *  ticker  [],   int   count  ,   XTP_EXCHANGE_TYPE   exchange_id  )   =   0  ;
+cpp
+//查询合约的最新快照信息应答
+///  @param   market_data   合约的最新快照信息
+///  @param   error_info   查询合约的最新快照信息时发生错误时返回的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次查询的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+virtual   void   OnQueryTickersLatestMarketData  (  XTPMD  *   market_data  ,   XTPRI   *  error_info  ,   bool   is_last  ) { };
+（5）查询港股通的静态信息
+cpp
+///获取港股通的静态信息
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+virtual   int   QueryAllHKCInfo  ()   =   0  ;
+cpp
+///查询港股通完整静态信息的应答
+///  @param   hkcsi   港股通静态信息
+///  @param   error_info   查询港股通完整静态信息时发生错误时返回的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次查询港股通完整静态信息的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+virtual   void   OnQueryAllHKCInfo  (  XTPHKCSI  *   hkcsi  ,   XTPRI   *  error_info  ,   bool   is_last  ) { };
+（6）查询指数通的静态信息
+cpp
+///获取指数通的静态信息
+///  @return   发送查询请求是否成功，“0”表示发送查询请求成功，非“0”表示发送查询请求不成功
+virtual   int   QueryAllIndexPressInfo  ()   =   0  ;
+cpp
+///查询指数通完整静态信息的应答
+///  @param   ipsi   指数通完整静态信息
+///  @param   error_info   查询指数通完整静态信息时发生错误时返回的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次查询指数通完整静态信息的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+virtual   void   OnQueryAllIndexPressInfo  (  XTPIPSI  *   ipsi  ,   XTPRI   *  error_info  ,   bool   is_last  ) { }
+2.3. 订阅  ​
+（1）目前我们支持按股票代码、按市场进行订阅。快照、逐笔、订单薄(OB)使用不同的订阅接口。
+（2）生产环境使用UDP组播，推荐客户按市场进行订阅。
+（3）按市场订阅接口：SubscribeAllMarketData()、SubscribeAllOptionMarketData()、SubscribeAllTickByTick()、SubscribeAllOrderBook()。
+（4）按股票代码订阅接口：SubscribeMarketData()、SubscribeTickByTick()、SubscribeOrderBook()。
+（5）指数通和港股通全订阅接口：SubscribeAllIndexPress()、SubscribeAllHKCMarketData()。
+例如：使用SubscribeMarketData()订阅快照行情：
+cpp
+///订阅行情，包括股票、指数、期权、债券等。
+///  @return   订阅接口调用是否成功，“0”表示接口调用成功，非“0”表示接口调用出错
+///  @param   ticker   合约ID数组，注意合约代码必须以'\0'结尾，不包含空格
+///  @param   count   要订阅/退订行情的合约个数
+///  @param   exchange_id   交易所代码（TCP模式下不支持新三板行情订阅）
+///  @remark   可以一次性订阅同一证券交易所的多个合约，在TCP连接方式时，无论用户因为何种问题需要重新登录行情服务器，都需要重新订阅行情
+virtual   int   SubscribeMarketData  (  char   *  ticker  [],   int   count  ,   XTP_EXCHANGE_TYPE   exchange_id  )   =   0  ;
+订阅函数，传入需要订阅的股票代码，订阅股票的个数，以及市场。注意市场不要写错。如股票代码同样是“000001”，深交所表示平安银行，上交所表示上证指数。
+OnSubMarektData()返回订阅结果。
+cpp
+///订阅行情应答，包括股票、指数和期权
+///  @param   ticker   详细的合约订阅情况
+///  @param   error_info   订阅合约发生错误时的错误信息，当error_info为空，或者error_info.error_id为0时，表明没有错误
+///  @param   is_last   是否此次订阅的最后一个应答，当为最后一个的时候为true，如果为false，表示还有其他后续消息响应
+///  @remark   每条订阅的合约均对应一条订阅应答，需要快速返回，否则会堵塞后续消息，当堵塞严重时，会触发断线
+virtual   void   OnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  ) { };
+注意：
+A. 生产环境L1/L2行情服务器均使用UDP推送模式，生产环境推荐使用全市场订阅接口。
+B. 测试环境使用TCP的方式推送行情。由于带宽的限制，请客户只订阅少量合约，否则会出现推送延时、断线等问题。
+2.4. 推送  ​
+（1）订阅成功后，当行情服务器有数据推过来时，OnDepthMarketData()、OnOrderBook()、OnTickByTick()、OnIndexPress()、OnHKCMarketData()会被回调，用户就可以从回调中读取数据了。
+（2）在这些回调函数中，请不要使用耗时操作，需尽快返回。否则，生产环境会造成API来不及接收数据而丢行情，测试环境会造成堵塞，堵塞严重时会触发断线。
+cpp
+///深度行情通知，包含买一卖一队列
+///  @param   market_data   行情数据
+///  @param   bid1_qty   买一队列数据
+///  @param   bid1_count   买一队列的有效委托笔数
+///  @param   max_bid1_count   买一队列总委托笔数
+///  @param   ask1_qty   卖一队列数据
+///  @param   ask1_count   卖一队列的有效委托笔数
+///  @param   max_ask1_count   卖一队列总委托笔数
+///  @remark   需要快速返回，否则会堵塞后续消息，当堵塞严重时，会触发断线
+virtual   void   OnDepthMarketData  (  XTPMD   *  market_data  ,   int64_t   bid1_qty  [],   int32_t   bid1_count  ,   int32_t   max_bid1_count  ,   int64_t   ask1_qty  [],   int32_t   ask1_count  ,   int32_t   max_ask1_count  ) { };
+cpp
+///行情订单簿通知，包括股票、债券
+///  @param   order_book   行情订单簿数据，需要快速返回，否则会堵塞后续消息，当堵塞严重时，会触发断线
+virtual   void   OnOrderBook  (  XTPOB   *  order_book  ) { };
+cpp
+///深逐笔行情通知，包括股票、债券
+///  @param   tbt_data   逐笔行情数据，包括逐笔委托和逐笔成交，此为共用结构体，需要根据type来区分是逐笔委托还是逐笔成交，需要快速返回，否则会堵塞后续消息，当堵塞严重时，会触发断线
+virtual   void   OnTickByTick  (  XTPTBT   *  tbt_data  ) { };
+cpp
+///指数通行情通知
+///  @param   idx   指数通的行情数据
+///  @remark   订阅指数通行情的时候触发推送通知
+virtual   void   OnIndexPress  (  XTPIndexPress   *  idx  ) { };
+cpp
+///港股通行情通知
+///  @param   hkc_md   港股通的行情数据
+///  @remark   订阅港股通行情的时候会触发推送通知
+virtual   void   OnHKCMarketData  (  XTPHKCMD   *  hkc_md  ) { };
+2.5. 回补  ​
+生产环境，接收UDP组播快照和逐笔行情丢包时，可请求回补丢失的数据。但回补比较慢，特别是数据量大时，建议做好优化不丢包。
+（1）请求回补时，RequestRebuildQuote()函数不能在回调线程中调用。
+（2）请求回补逐笔时，需传入通道号channel_number，逐笔开始的序列号begin、结束序列号end。逐笔区间： [begin, end] 前后闭区间。
+（3）请求回补快照时，需传入快照的开始时间begin、结束时间end。快照区间： [begin, end)  前闭后开区间。
+（4）当回补数据发送结束，OnRequestRebuildQuote()返回总体结果应答。当回补结果失败，且rebuild_result.result_code = XTP_REBUILD_RET_PARTLY时，需再次发起回补请求。
+cpp
+///请求回补指定行情，包括快照和逐笔
+///  @return   请求回补指定频道的逐笔行情接口调用是否成功，“0”表示接口调用成功，非“0”表示接口调用出错
+///  @param   rebuild_param   指定回补的参数信息，注意一次性回补最多1000个数据，超过1000需要分批次请求，一次只能指定一种类型的数据
+///  @remark   仅在逐笔行情丢包时或者确实快照行情时使用，回补的行情数据将从OnRebuildTickByTick或者OnRebuildMarketData()接口回调提供，与订阅的行情数据不在同一个线程内
+virtual   int   RequestRebuildQuote  (  XTPQuoteRebuildReq  *   rebuild_param  )   =   0  ;
+cpp
+///请求回补指定频道的逐笔行情的总体结果应答
+///  @param   rebuild_result   当回补结束时被调用，如果回补结果失败，则msg参数表示失败原因
+///  @remark   需要快速返回，仅在回补数据发送结束后调用，如果请求数据太多，一次性无法回补完，那么rebuild_result.result_code = XTP_REBUILD_RET_PARTLY，此时需要根据回补结果继续发起回补数据请求
+virtual   void   OnRequestRebuildQuote  (  XTPQuoteRebuildResultRsp  *   rebuild_result  ) { };
+回补的逐笔或快照数据，通过OnRebuildTickByTick()或OnRebuildMarketData()回调推送给用户。
+cpp
+///回补的逐笔行情数据
+///  @param   tbt_data   回补的逐笔行情数据
+///  @remark   需要快速返回，此函数调用与OnTickByTick不在一个线程内，会在OnRequestRebuildQuote()之前回调
+virtual   void   OnRebuildTickByTick  (  XTPTBT   *  tbt_data  ) { };
+cpp
+///回补的快照行情数据
+///  @param   md_data   回补的快照行情数据
+///  @remark   需要快速返回，此函数调用与OnDepthMarketData不在一个线程内，会在OnRequestRebuildQuote()之前回调
+virtual   void   OnRebuildMarketData  (  XTPMD   *  md_data  ) { };
+注意：
+A. 一次只能指定一种类型的回补数据，一次性回补最多请求1000个数据，超过1000需要分批次请求。
+B. 单个连接，每秒最多100次回补请求，超出该频率会报错。
+3. 数据结构及字段含义  ​
+3.1. 行情快照（XTPMD）赋值字段及含义  ​
+有关ticker代码及其含义的说明:
+上交所： http://www.sse.com.cn/market/price/report/
+深交所： http://www.szse.cn/market/trend/
+XTPMarketDataStruct结构体，使用 XTP_MARKETDATA_TYPE_V2 data_type_v2 字段，来表明是哪种数据类型。
+（1）指数字段说明
+data_type_v2 = XTP_MARKETDATA_V2_INDEX；
+exchange_id，交易所ID，枚举值
+ticker，股票代码，6位
+last_price，最新
+pre_close_price，昨日收盘
+open_price，今日开盘
+high_price，最高
+low_price，最低
+close_price，今收。上交所有该字段（大于0该值有效）。深交所无该字段，xquote将其赋值为last_price。
+data_time
+SHL1取自每行的时戳
+SHL2取自FAST层的时戳(非STEP层)
+SZ直接由深交所给出
+qty，成交量，上交所单位手，深交所单位股
+turnover，成交金额，单位元
+trades_count，成交笔数，SH无意义（填0），SZ有值
+（2）股票/基金字段说明
+股票的价格精度为0.01元，债券为0.001元。
+data_type_v2 = XTP_MARKETDATA_V2_ACTUAL；
+exchange_id，交易所ID，枚举值
+ticker，股票代码，6位
+last_price，最新
+pre_close_price，昨收
+open_price，今开
+high_price，最高
+low_price，最低
+close_price，今收。上交所有该字段（大于0该值有效）。深交所无该字段，xquote将其赋值为last_price。
+深交所的今收，是在收盘后，通过文件( cashsecurityclosemd_*.xml )的形式下发的。
+data_time
+SHL1取自每行的第一行header的时戳，含义为最近一次发送快照的时间。
+SHL2取自FAST层的时戳（非STEP层），含义为“最新委托、最新成交、最新状态”的最新时间，全市场行情时间，会持续更新。
+SZ直接由深交所给出。
+upper_limit_price/lower_limit_price，涨/跌停价。SZ该值由深交所实时给出；SH来源于初始化文件（上交所没有实时给出该值），SH该字段赋值为0，可从静态数据中获取。
+qty，成交量，单位股
+turnover，成交金额，单位元
+avg_price，无意义
+bid[10]/ask[10]，买/卖价
+L1数据源，只显示5档。L2数据源，显示10档。
+单位元。
+bid_qty[10]/ask_qty[10]，买/卖量
+L1数据源，只显示5档。L2数据源，显示10档。
+单位股。
+trades_count，成交笔数。SHL1无意义（填0），SHL2/SZL1/SZL2有值。
+ticker_status，当前交易状态及标志，8字节。
+沪市如下：
+第 0 位：
+'S'，启动（开市前）时段
+'C'，开盘集合竞价时段
+'T'，连续竞价时段
+'E'，闭市时段
+'P'，产品停牌
+'M'，表示可恢复交易的熔断时段（盘中集合竞价）
+'N'，表示不可恢复交易的熔断时段（暂停交易至闭市）
+'U'，表示收盘集合竞价时段(SH)
+第 1 位：
+'0'，此产品不可正常交易
+'1'，此产品可以正常交易
+无意义填空格
+第 2 位：
+'0'，未上市
+'1'，已上市
+第 3 位：
+'0'，此产品在当前时段，不接受进行新订单申报
+'1'，此产品在当前时段，可接受进行新订单申报
+无意义填空格
+深市如下：
+第 0 位：
+'S'，启动（开市前）时段
+'O'，开盘集合竞价时段
+'T'，连续竞价时段
+'B'，休市
+'C'，表示收盘集合竞价时段
+'E'，闭市
+'H'，临时停牌
+'A'，盘后交易
+'V'，波动性中断
+第 1 位：
+'0'，正常状态
+'1'，全天停牌
+无意义填空格
+深交所只有第0、1位，没有第2、3位。
+上海市场  0-9:15  9:15-9:25  9:25-9:30  9:30-11:30  11:30-13:00  13:00-14:57  14:57-15:00  15:00-
+非停牌  S 10  C111  T111  T111  T111  T111  U111  E110
+停牌  P011  P011  P011  P011  P011  P011  P011  P011
+上海市场  0-9:25  9:25  9:25-9:30  9:30-11:30  11:30-13:00  13:00-14:57  14:57-15:00  15:00-
+SH603192
+2018.08.28
+[9:30-10:00]
+盘中停牌  ---  C111  T111  P011  T111  T111  U111  E111
+注意：从2018-12月份开始，上交所停止发送开盘集合竞价消息（UA3107）。开盘/收盘集合竞价消息，直接从UA3202发出。
+深圳市场  0-9:15  9:15-9:25  9:25-9:30  9:30-11:30  11:30-13:00  13:00-14:57  14:57-15:00  15:00-
+非停牌  S0  O0  B0  T0  B0  T0  C0  E0
+停牌  S1  C1  B1  T1  B1  T1  C1  E1
+深圳市场  0-9:15  9:15-9:25  9:25-9:30  9:30  9:30-10:00  10:00-11:30  11:30-13:00  13:00-14:57  14:57-15:00  15:00-
+SZ300747
+2018.05.25
+[9:30-10:00]
+盘中停牌  S1  C1  B1  T1  V1  T1  B1  T1  C1  E1
+data_type，股票时为0。
+stk，股票扩展字段。
+total_bid_qty，委托买入总量，SHL2/SZ有值。
+total_ask_qty，委托卖出总量，SHL2/SZ有值。
+ma_bid_price，加权平均委买价格，SHL2/SZ有值。
+ma_ask_price，加权平均委卖价格，SHL2/SZ有值。
+ma_bond_bid_price，债券加权平均委买价格，SHL2有值。
+ma_bond_ask_price，债券加权平均委卖价格，SHL2有值。
+yield_to_maturity，债券到期收益率，SHL2有值。
+iopv，基金实时参考净值，SH/SZ有值。
+etf_buy_count，ETF申购笔数，SHL2有值。
+etf_sell_count，ETF赎回笔数，SHL2有值。
+etf_buy_qty，ETF申购数量，SHL2有值。
+etf_buy_money，ETF申购数量，SHL2有值。
+etf_sell_qty，ETF赎回数量，SHL2有值。
+etf_sell_money，ETF赎回金额，SHL2有值。
+total_warrant_exec_qty，权证执行的总数量，SHL2有值。
+warrant_lower_price，权证跌停价格，SHL2有值。
+warrant_upper_price，权证涨停价格，SHL2有值。
+cancel_buy_count，买入撤单笔数，SHL2有值。
+cancel_sell_count，卖出撤单笔数，SHL2有值。
+cancel_buy_qty，买入撤单数量，SHL2有值。
+cancel_sell_qty，卖出撤单数量，SHL2有值。
+cancel_buy_money，买入撤单金额，SHL2有值。
+cancel_sell_money，卖出撤单金额，SHL2有值。
+total_buy_count，买入总笔数，SHL2有值。
+total_sell_count，卖出总笔数，SHL2有值。
+duration_after_buy，买入委托成交最大等待时间，SHL2有值。
+duration_after_sell，卖出委托成交最大等待时间，SHL2有值。
+num_bid_orders，买方委托价位数，SHL2有值。
+num_ask_orders，卖方委托价位数，SHL2有值。
+pre_iopv，基金T-1日净值。SZ有值。
+（3）期权字段说明
+期权的价格精度为0.0001元。
+data_type_v2 = XTP_MARKETDATA_V2_OPTION；
+exchange_id，交易所ID，枚举值
+ticker，股票代码，8位
+last_price，最新成交价
+pre_close_price，昨日收盘价
+SH mktdt数据源，在行情文件中不提供，初始化时从reff03MMDD.txt取；
+SH LDDS数据源，在流式行情中提供该字段(PrevClosePx)；
+SZ 数据源，在流式行情中提供该字段(PrevClosePx).
+open_price，今开
+high_price，当日最高价
+low_price，当日最低价
+close_price，今收价，SH mktdt总为0。SH LDDS大于0该值有效（观察到盘中为0，收盘后大于0）。SZ 该值总等于last_price。
+pre_total_long_positon，SH和SZ市场，该值总为0
+total_long_positon，未平仓合约数量（张或股）
+pre_settl_price，昨日结算价
+settl_price，今日结算价，SH mktdt该值为0，SH LDDS数据源有值；SZ数据源该值为0
+upper_limit_price/lower_limit_price，涨/跌停价。SH来源于初始化文件（上交所没有实时给出该值）。
+data_time
+SH mktdt数据源，取自每行的时戳（观察到为上交所最近一次的成交时间，若委托发生变化，该值不变）
+SH LDDS数据源，取自FAST层最里面的时戳（观察到为上交所最近一次的成交时间，若委托发生变化，该值不变）
+qty，当日累计成交量
+turnover，当日累计成交金额
+avg_price，均价，计算方法为turnover/qty，无意义
+bid[10]/ask[10]，买/卖价，SH/SZ均只有5档
+bid_qty[10]/ask_qty[10]，买卖量，SH/SZ均只有5档
+trades_count，成交笔数，SH mktdt数据源为0，SH LDDS数据源有值
+ticker_status，当前交易状态及标志，8字节
+上交所标志含义
+第 0 位：
+'S'，启动（开市前）阶段
+'C'，集合竞价
+'T'，连续交易
+'B'，休市
+'E'，闭市
+'V'，波动性中断
+'P'，临时停牌
+'U'，收盘集合竞价
+'M'，可恢复交易的熔断（盘中集合竞价）
+'N'，不可恢复交易的熔断（暂停交易至闭市）
+第 1 位：
+'0'，未连续停牌
+'1'，连续停牌
+预留则填空格
+第 2 位：
+'0'，不限制开仓
+'1'，限制备兑开仓
+'2'，卖出开仓
+'3'，限制卖出开仓、备兑开仓
+'4'，限制买入开仓
+'5'，限制买入开仓、备兑开仓
+'6'，限制买入开仓、卖出开仓
+'7'，限制买入开仓、卖出开仓、备兑开仓
+第 3 位：
+'0'，此产品在当前时段不接受进行新订单申报
+'1'，此产品在当前时段可接受进行新订单申报
+深交所标志含义
+同股票字段说明
+data_type，期权为1
+opt，期权扩展字段（仅SH市场有意义，SZ市场值均无意义）
+auction_price，波段性中断参考价
+auction_qty，波段性中断集合竞价虚拟匹配量
+last_enquiry_time，最近询价时间，格式为YYYYMMDDHHMMSSsss，若无询价时，HHMMSSsss部分为0。总为0。
+（4）债券字段说明
+data_type_v2 = XTP_MARKETDATA_V2_BOND；
+从2021.10.25后，上交所启用新的债券交易系统，修改了债券行情的协议。
+上交所L1时，ticker_status有值；
+上交所L2时，ticker_status无意义；bond.instrument_status有值；
+深交所L1/L2时，ticker_status有值。
+SHL2的债券的加权平均价，要用ma_bond_bid_price和ma_bond_ask_price。
+SZ的债券加权平均价，则用ma_bid_price和ma_ask_price。
+（5）北交所字段说明
+A. 实时行情字段说明
+快照行情发布使用和沪深一样的结构体(XTPMarketDataStruct)中的一部分字段，如下所示：
+exchange_id，交易所 ID，枚举值：XTP_EXCHANGE_NQ
+ticker，股票代码，6 位
+last_price，最新
+pre_close_price，昨收
+open_price，今开
+high_price，最高
+low_price，最低
+close_price，今收盘
+total_long_position，持仓量
+data_time，DBF 行情，取的是 DBF 文件更新时间
+qty，成交量
+turnover，成交额
+bid[10]/ask[10]，买/卖价
+北交所数据源，只显示 5 档。
+单位元。
+bid_qty[10]/ask_qty[10]，买/卖量
+北交所数据源，只显示 5 档。
+单位股。
+其余字段北交所快照均未使用。
+B. 请求接口XTPQuoteNQFullInfo静态数据字段说明：
+“layer_type” 分层信息：用于过滤北交所的证券代码，layer_type为2时，是北交所证券，其中有一个指数899050是北证50指数，交易所给的layer_type是8，若需要指数，需按照代码过滤899050。
+2 - 北交所
+1 - 创新层
+0 - 基础层
+8 - 其他
+“security_type” 合约详细类型，目前该字段没有定义，取值是255-其他。
+若需要判断证券类型，请根据交易所证券代码前三位字符进行判断：
+类型\合约代码  第一位  第一位  第三位
+现货  9  2  0
+指数  8  9  9
+债券  8  2  1
+注意：目前北交所上线的证券只有现货股票、债券和一个指数899050。
+（6）买一卖一委托队列字段及含义
+L1没有委托队列，L2有委托队列。
+在订阅行情快照后，若有行情数据推过来，OnDepthMarketData()函数就会被回调。
+cpp
+///深度行情通知，包含买一卖一队列
+///  @param   market_data   行情数据
+///  @param   bid1_qty   买一队列数据
+///  @param   bid1_count   买一队列的有效委托笔数，即bid1_qty数组的长度，最大为50
+///  @param   max_bid1_count   买一队列总委托笔数
+///  @param   ask1_qty   卖一队列数据
+///  @param   ask1_count   卖一队列的有效委托笔数，即ask1_qty数组的长度，最大为50
+///  @param   max_ask1_count   卖一队列总委托笔数
+///  @remark   需要快速返回，否则会堵塞后续消息，当堵塞严重时，会触发断线
+virtual   void   OnDepthMarketData  (  XTPMD   *  market_data  ,   int64_t   bid1_qty  [],   int32_t   bid1_count  ,   int32_t   max_bid1_count  ,   int64_t   ask1_qty  [],   int32_t   ask1_count  ,   int32_t   max_ask1_count  ) { };
+3.2. 逐笔（XTPTBT）赋值字段及含义  ​
+（1）深交所逐笔
+深交所只有逐笔委托和逐笔成交，没有逐笔状态。
+exchange_id，交易所ID
+ticker，股票代码，6字节
+seq，无意义，预留
+data_time，委托时间或成交时间，格式YYYYMMDDHHMMSSsss
+type，委托或成交标识
+entrust，逐笔委托
+channel_no，频道代码
+side，买卖方向。'1':买; '2':卖; 'G':借入; 'F':出借。
+ord_type，订单类别。'1': 市价; '2': 限价; 'U': 本方最优。注：交易所没有给出转限、转撤等更加详细的信息
+seq，在该channel_no内的委托序号
+price，委托价格
+qty，委托数量
+order_no，SZ无意义
+trade，逐笔成交
+channel_no，频道代码
+trade_flag，成交标志。SZL2，成交标识（'4':撤; 'F':成交）
+seq，在该channel_no内的成交序号
+price，成交价格
+qty，成交数量
+money，成交金额，无意义
+bid_no，买方订单号，可以追溯到entrust中的seq
+ask_no，卖方订单号，可以追溯到entrust中的seq
+（2）上交所逐笔
+跟深交所相比，上交所增加了逐笔状态消息。
+exchange_id，交易所ID
+ticker，股票代码，6字节
+seq，对应上交所bizIndex字段，在同一个channel内唯一
+data_time，委托时间或成交时间，格式YYYYMMDDHHMMSSsss
+type，委托或成交标识
+entrust，逐笔委托
+channel_no，频道代码
+side，买卖方向。'B':买; 'S':卖
+ord_type，订单类别。'A':增加; 'D':删除
+seq，在该channel_no内的委托序号，单调递增
+price，委托价格
+qty，剩余委托数量(balance)
+order_no，原始订单编号
+trade，逐笔成交
+channel_no，频道代码
+trade_flag，成交标志。SHL2，内外盘标识（'B':主动买; 'S':主动卖; 'N':未知）
+seq，在该channel_no内的成交序号，单调递增
+price，成交价格
+qty，成交数量
+money，成交金额，SHL2有该值，SZL2没有该值（总为0）
+bid_no，买方订单号，可以追溯到entrust中的order_no
+ask_no，卖方订单号，可以追溯到entrust中的order_no
+state，状态订单
+channel_no，频道代码
+seq，在该channel_no内的序号，单调递增
+flag，状态
+（3）对数据的解释
+SHL1、SZL1没有逐笔。
+SHL2的撤单信息在逐笔委托中(order_type='D')；SZL2的撤单信息在逐笔成交中（trade_flag='4'）。
+channel_no频道代码。同一只股票的逐笔委托、逐笔成交、逐笔状态行情数据中，channel_no都相同。不同股票的逐笔行情数据中，channel_no可能不同。同一个channel_no会有多只股票的逐笔行情数据。
+SZL2的逐笔委托和逐笔成交，放到一起编号。可通过逐笔成交里的订单号（bid_no或ask_no）追溯到对应的委托逐笔（XTPTickByTickEntrust.seq）。
+SHL2的逐笔委托&逐笔成交&逐笔状态，放到一起编号。可通过逐笔成交里的订单号（bid_no或ask_no）追溯到对应的委托逐笔（XTPTickByTickEntrust.order_no）。
+注意：
+A. 上交所逐笔委托和成交消息合并之前，SHL2股票/基金，逐笔委托单独编号（entrust.seq），逐笔成交单独编号（trade.seq）。逐笔委托&逐笔成交一起有编号（tbt.seq）。
+B. 期权无逐笔数据。
+逐笔现有channel_no如下：
+SH逐笔channel_no：[1, 6] [20] [801] （共8个，20为B股，801为债券）
+SZ逐笔channel_no：[2011, 2015] [2021, 2025] [2031, 2035] [2061][2071] （共17个，[2031, 2035]为可转债，2061为国债逆回购，2071为其他债券）
+3.3. 订单薄（XTPOB）赋值字段及含义  ​
+（1）结构字段说明
+exchange_id，交易所ID
+ticker，股票代码
+unused，预留
+last_price，最近成交价
+qty，成交总量
+turnover，成交总金额
+trades_count，成交笔数
+bid[10]/ask[10]，十档买/卖价
+bid_qty[10]/ask_qty[10]，十档买/卖量
+data_time，最近成交时间，格式YYYYMMDDHHMMSSsss
+（2）对数据的解释
+订单薄，是根据交易所的逐笔委托和逐笔成交数据重建的。
+在集合竞价阶段（包括开盘和收盘），不推送该数据，这个时间段的行情快照，可以从XTPMD结构中获取。
+没有推送间隔限制，跟逐笔一样实时推送。
+使用该数据的用户，应该与行情快照（XTPMD）结合起来使用。最新的时间戳，便是最新的数据。
+深交所债券：
+A. 债券上市首日开盘集合竞价的有效竞价范围为发行价的上下30%，连续竞价、收盘集合竞价的有效竞价范围为最近成交价的上下10%；
+B. 债券非上市首日开盘集合竞价的有效竞价范围为前收盘价的上下10%，连续竞价、收盘集合竞价的有效竞价范围为最近成交价的上下 10%。
+4. FAQ  ​
+4.1. 公网测试环境  ​
+（1）公网测试环境是为了方便测试，在公网上搭建的一套测试环境。7*24小时提供行情服务，除非必要的维护时间。
+（2）公网测试环境仅供客户调试API接口，提供的L2测试数据包括：10档价/量、买一卖一委托队列、逐笔行情，但没有订单薄OB行情。
+（3）在公网测试环境，不建议全订阅。因为带宽有限。
+（4）所有用户在上实盘前，请务必在测试环境先做行情接入测试。
+（5）公网测试环境，使用TCP的方式推送数据。API需要配置成TCP的方式接收行情，否则会收不到行情的更新数据。
+（6）请不要阻塞API行情接收线程。如果在回调线程收数据慢，行情服务器会断开与API的连接。
+若使用配置文件中的参数登录，请在config.json中按如下配置：
+cpp
+"quote_ip"  :   "122.112.219.239"  ,
+"quote_port"  :   8100  ,
+"quote_user"  :   "quoteusername"  ,
+"quote_password"  :   "quotepw"  ,
+"quote_ticker"  : {
+"instrument"  : [
+"600120"
+],
+"exchange"  :   1
+},
+"hb_interval"  :  30  ,
+"quote_protocol"  :  1
+调用API接口传入参数登录，请按如下接口说明配置：
+cpp
+///用户登录请求
+///  @return   登录是否成功，“0”表示登录成功，“-1”表示连接服务器出错，此时用户可以调用GetApiLastError()来获取错误代码，“-2”表示已存在连接，不允许重复登录，如果需要重连，请先logout，“-3”表示输入有错误
+///  @param   ip   服务器ip地址，类似“127.0.0.1”
+///  @param   port   服务器端口号
+///  @param   user   登录用户名
+///  @param   password   登录密码
+///  @param   sock_type   “1”代表TCP，“2”代表UDP
+///  @param   local_ip   本地网卡地址，类似“127.0.0.1”
+///  @remark   此函数为同步阻塞式，不需要异步等待登录成功，当函数返回即可进行后续操作，此api只能有一个连接
+virtual   int   Login  (  const   char*   ip  ,   int   port  ,   const   char*   user  ,   const   char*   password  ,   XTP_PROTOCOL_TYPE   sock_type  ,   const   char*   local_ip   =   NULL  )   =   0  ;
+4.2. TCP推送方式及问题排查  ​
+TCP模式下，若用户收不到行情数据，请按以下方式排查。
+（1）启动API程序。
+（2）确保Login()的sock_type参数使用的是XTP_PROTOCOL_TCP。
+（3）订阅股票SubscribeMarketData()，确保回调函数OnSubMarketData()返回成功。
+（4）若还没有收到数据（OnDepthMarketData()没有被回调），请使用抓包工具(如wireshark，tcpdump)，看看数据有没有到达API所在的机器。
+（5）tcpdump -i 网卡 tcp port 端口号（如 tcpdump -i p5p2 tcp port 6666），看看行情数据有没有到达主机。
+4.3. 内网生产环境  ​
+（1）提供的行情类型：
+XTP Pro在每个机房，都部署有L1行情服务器和L2行情服务器，均使用UDP方式对外推送行情。请勿跨机房连接行情服务器。
+L1，只提供5档快照。
+L2，提供10档快照、买一卖一委托队列、逐笔。
+另外，在每个机房部署有OB服务器，都提供SHOB和SZOB。
+期权(SH/SZ)，无论哪个环境，交易所只提供5档快照，不提供逐笔。
+（2）L2行情发送说明：
+买一卖一委托队列，跟行情快照是同时发过来的。
+SHL2的逐笔数据，在开盘时间段，延时比较大。
+SZL2的逐笔数据，深交所一般是实时发过来的。即交易下单后，行情马上可以看到逐笔委托。
+每条行情快照加上买一卖一委托队列的大小为，约为1.5KB（按最大算）。
+每条逐笔的大小约为112B。
+在数据高峰时期（9:15,9:30,13:00,15:00），数据量非常大，约20W笔／秒。推送的带宽约为22MB／秒。
+（3）请不要阻塞API行情接收线程：
+API使用UDP（组播）方式收行情：API接收线程收数据慢（接收线程阻塞，或者在接收线程处理完数据后再接收下一条数据），可能会丢数据。
+为了避免丢数据的问题发生，建议用“生产者／消费者”的模式来处理行情数据。接收线程只管收数据，另启动一个线程处理数据。
+提示：测试发现，格式化类的操作（如snprintf, printf）比较耗时，请勿在接收线程中使用。
+（4）使用组播时，请确保API所在的机器，能够收到组播数据。
+防火墙开启时，组播数据可能会被过滤掉。请关闭防火墙，或允许行情的组播数据通过防火墙。
+（5）行情数据丢失解释：
+行情服务器一般在8:35至8:45就绪，交易所从9：15开始集合竞价。但在集合竞价前，交易所会发一些数据（只有行情快照，是为了测试），我们也会把这些盘前数据发给用户。
+假如API在9:10启动，可能会丢失一部分盘前数据（API日志中会提示WARNING），这个是没有关系的。
+但若在盘中有大量提示丢数据的日志，需要查找原因。
+所有用户将实盘行情用于交易前，请务必在实盘做好行情接入测试。
+4.4. UDP（组播）推送方式及问题排查  ​
+生产环境Level-2、Level-1行情数据，都是通过组播的方式推送给API的，请使用UDP连接，请关闭防火墙。有些机器收不到组播数据，请按照以下步骤排查。
+（1）配置quote_config.ini，开启需要接收的行情类型。
+（2）启动API程序。
+（3）确认SetConfigFile()成功读取行情接收配置文件。
+（4）确保Login()的sock_type参数使用的是XTP_PROTOCOL_UDP。
+（5）订阅股票SubscribeAllMarketData()，确保回调函数OnSubscribeAllMarketData()返回成功。
+（6）进行socket参数优化，可参考：行情参数优化_XTP Pro版本。
+（7）若还没有收到数据（OnDepthMarketData()没有被回调），请使用抓包工具(如wireshark，tcpdump)，看看组播数据有没有到达API所在的机器。组播的地址与端口，请查看API的日志xtpxquote.log，也可以与XTP运维人员联系。
+A. 用户能使用的所有组播，如下图所示:
+B. 用户实际订阅的组播，如下图所示:
+（8）tcpdump -i 网卡 udp port 组播端口号（如 tcpdump -i p5p2 udp port 10346），看看组播数据有没有到达主机。
+（9）若没有抓到行情组播数据，请调整系统参数。
+windows系统：
+打开注册表编辑器regedit，
+路径：HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\Tcpip\Parameters，在该路径下新建两个DWORD变量，一个命名为IGMPVersion，值设定为3，第二个命名为IGMPLevel，值设定为2。
+路径： HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Afd\Parameters，增加DefaultReceiveWindow字段，DWORD 类型，大小设置为 134217728(128M)。
+卸掉杀毒软件（或者杀毒软件放行组播数据）。
+重启系统。
+关掉防火墙（或允许组播使用的端口通过）。
+linux系统：
+确保组播地址绑定到了正确的网卡上，netstat -gn；
+关掉防火墙（或允许组播使用的端口通过）：systemctl stop firewalld.service。
+下面命令是临时的，操作系统重启后会失效。需要写在操作系统的启动脚本中。
+sysctl -w net.core.rmem_default="134217728"
+sysctl -w net.core.rmem_max="134217728"
+sysctl -w net.core.wmem_default="134217728"
+sysctl -w net.core.wmem_max="134217728"
+sysctl -w net.ipv4.udp_mem="134217728 134217728 268435456"
+sysctl -w net.ipv4.udp_rmem_min="134217728"
+sysctl -w net.ipv4.udp_wmem_min="134217728"
+如果设置 net.ipv4.udp_mem 时报错：Invalid argument，那就去掉引号再试下，因为不同的系统略有区别。
+（10）若还不能收到数据，添加临时路由: route add -net 组播地址 掩码 dev 设备, (如route add -net 230.1.1.0/24 dev p5p2)。
+（11）使用我们的订阅程序QuoteSuber，订阅一整天行情，看API的xtpxquote.log日志，看看有没有丢包；若丢包，需要查找原因。
+（12）API若发生频繁丢包，可以调整netdev_max_backlog到4000，调整网卡接收队列设置到最大值： ethtool -g <interface>  ，以及tuned优化。
+（13）API的默认日志级别是DEBUG，需要调整到INFO（或ERROR），否则可能会导致丢包。参见CreateQuoteApi()的log_level参数。
+4.5. 行情数据更新频率  ​
+逐笔和订单簿行情是实时更新的，快照行情更新频率如下：
+种类  集合竞价  连续竞价  午间休市
+SH指数  约5秒一次 （不准）  约5秒一次（不准）  60秒推一次 L2时间戳跟着变 （201901后，不准）
+SH股票  有变化3秒一次 无变化60秒一次  有变化3秒一次 无变化60秒一次  60秒推一次 L2时间戳跟着变 （201901后）
+SH期权  有变化15秒一次 无变化30秒一次  有变化0.5秒一次 无变化30秒一次  30秒一次
+SZ指数  60秒一次  3秒一次  60秒推一次 时间戳跟着变
+SZ股票  60秒一次  有变化3秒一次 无变化60秒一次  60秒推一次 时间戳跟着变
+SZ期权  6秒一次  有变化0.5秒一次 无变化60秒一次  6秒一次
+NQEX  有变化3秒一次 无变化60秒一次  有变化3秒一次 无变化60秒一次  60秒一次 时间戳跟着变
+逐笔行情推送时间如下：
+种类  集合竞价/连续竞价/午间休市
+SH逐笔委托  9:15-9:25，可以下单，但交易所不推逐笔委托 9:25，开始推送逐笔委托 9:25-9:30，无数据（开盘集合竞价结束到连续竞价开始前） 9:30，开始推（连续竞价）
+SH逐笔成交  9:25，有大量逐笔成交（集合竞价） 9:25-9:30，无数据（开盘集合竞价结束到连续竞价开始前） 9:30，开始推（连续竞价）
+SZ逐笔委托  9:15-9:25，推逐笔委托（期间可以下单，可以撤单） 9:25-9:30，无数据（开盘集合竞价结束到连续竞价开始前） 9:30，开始推（连续竞价）
+SZ逐笔成交  9:15-9:25，只有逐笔撤单，无逐笔成交单 9:25，有大量逐笔成交（集合竞价）9:25-9:30，无数据（开盘集合竞价结束到连续竞价开始前）9:30，开始推（连续竞价）
+SH和SZ均无期权的逐笔。
+4.6. 丢包问题API日志排查  ​
+（1）asynlog.YYYYMMDD 异步日志中有 快照数据MarketData、逐笔数据TickByTick、订单薄数据OrderBook的seq。
+（2）判断丢包，看GroupBase::recv_thread_lnx行中，同一组[data_type]+[stream_id]下的[seq]是否连续没有缺失，如果seq最大值和最小值的差值跟seq行数一致，那就没有丢包。
+例如：[09:15:18.123.490][13956][DEBUG][qa_group.cpp:222]GroupBase::recv_thread_lnx: [46] [103] [42332] [59].
+其中：[46] 是行情类型data_type，[103] 是stream_id，[42332] 是seq。
+（3）行情类型data_type：
+上交所：
+Level1 normal软件行情：
+[10]指数快照，[11]期权快照，[12]股票、基金、债券快照；
+Level2 fpga硬件行情：
+[20]指数快照，[22]股票、基金快照，[23]债券快照；
+[26]股票逐笔，[27]债券逐笔；
+[8]订单簿；
+深交所：
+Level1 & Level2行情：
+[40]指数快照，[41]期权快照，[42]股票、基金、可转债快照，[43]债券现券快照，[44]港股通快照，[45]市场实时状态；
+[46]股票、基金、可转债逐笔，[47]债券现券逐笔；
+[9]订单簿；
+北交所：
+[50]股票快照，[51]指数快照，[52]债券快照；
+[53]债券逐笔；
+（4）stream_id：
+是交易所的数据，不用关注；
+（5）原始数据包seq：
+这里的seq包是没有解析的原始数据包，一个seq包里有1笔或多笔消息，解析后会有1笔或多笔行情数据。
+（6）如果同时订阅了normal软件和fpga硬件行情，收到的2路seq序号是各自顺序递增，seq序号大的1路数据包，一般来说是fpga行情。
+（7）XTP Pro行情服务器decode queue设置的512*1024，目前512K足够了，如果不够会提示：recv_thread_lnx decodequeue full。
+4.7. 对seq is discrete N to M的解释  ​
+（1） 组播（UDP）推送行情模式下：
+行情服务器启动后，若有数据需要推送，就会往外推组播数据。每个组播组行情的UDP包，seq统一连续编号。
+若API启动前行情服务器已经往外推送了组播数据，因为订阅行情晚了，交易所已经推送的包肯定是丢掉的。
+若在接收行情的过程中，发现大量下图所示的日志，如：seq is discrete 5 : 93563 - 93632。要分2种情况来看：
+A. 如果只开启了一路行情，说明丢失了逐笔数据，需要查找原因。
+B. 如果同时开启了两路行情，可能其中一路丢包了，另一路没有丢包，最终并没有丢包。此时，需通过asynlog.YYYYMMDD日志来确认丢包。
+如果xtpxquote.log没有discrete关键字，可查看asynlog.YYYYMMDD日志，确认同一组[data_type]+[stream_id]下seq是否按顺序连续编号。
+（2）对日志”udp seq is discrete 2013 : N - M."的解释：
+2013是频道号channel_no，逐笔丢包数量为 M-N+1 。
+行情服务器会对发出去的每个udp包按顺序编号，不同行情类型的udp包各自顺序编号。
+以上海股票逐笔(sh_level2_tbt_stock)为例，API正常收到包的顺序应该为1,2,3,4,5，但若API收到1,2,3,然后收到5，就会去等4的包。若在一段时间内，API还没有收到4的包，就会打印上面的日志。并认为4丢掉了。
+（3）若发现丢包较多，可以把UDP的接收缓存开大点，内核参数从128MB增大到256MB。
+Windows:
+打开注册表的 “HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Afd\Parameters”选项，增加“DefaultReceiveWindow”字段，DWORD类型，大小设置为113246208(128M)。
+发送端（行情服务器），可以增加“DefaultSendWindow”字段，DWORD类型，大小设置为113246208(128M)。
+注意：
+A. 如果使用solarflare网卡，开启efvi，并且一台服务器上开启了多个程序接收L2行情，那么每个程序都要开efvi，或者每个都不开efvi。
+B. 如果只是部分程序开启efvi，会导致没开efvi的程序收不到行情。
+同理，如果不开启efvi，而是通过Onload启动的程序，一台服务器上的多个程序，要么都开Onload，要么都不开Onload。
+4.8. 其它问题  ​
+（1） SHL2的最新价和收盘价，分别是怎么计算得到的？发现收盘后，有些股票的收盘价和最新价不相同。
+最新价 = 最新一支逐笔成交的价格。
+收盘价 = 证券的收盘价为当日该证券最后一笔交易前一分钟所有交易的成交量加权平均价（含最后一笔交易）。当日无成交的，以前收盘价为当日收盘价。
+债券质押式回购的收盘价为当日该证券最后一笔交易前一小时所有交易的成交量加权平均价（含最后一笔交易）。当日无成交的，以前收盘价为当日收盘价。
+收盘集合竞价阶段产生交易的，这两个价格相同；否则可能会不同。
+（2） SHL1和SHL2每天的快照数量不一样。SHL1和SHL2分别在什么时候推出快照？所有档位，只要发生变化就推。
+SHL1，买卖 5档盘口发生变化时推。
+SHL2，买卖10档盘口发生变化时推。
+（3）SHL2和SZL2的逐笔行情，都是实时发送。
+最后更新:
+Pager
+上一页  Pro行情旧版配置文件参数说明
+下一页  API常见问题
+鲁ICP备09057662号 | 鲁公网安备 37010302000722号
+Copyright © 2015-2026 All Rights Reserved. 版权所有 中泰证券股份有限公司

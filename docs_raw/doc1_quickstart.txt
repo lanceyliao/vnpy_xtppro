@@ -1,0 +1,613 @@
+XTP-Pro API文档
+Skip to content
+XTP-Pro API文档
+Search      K
+Main Navigation       业务列表
+Appearance
+Menu
+Return to top
+Sidebar Navigation
+快速入门
+行情XQuote-API使用指南QuickStart
+交易XTrader-API使用指南QuickStart
+算法XAlgo-API使用指南QuickStart
+升级使用说明
+从XTP行情到XTP-Pro行情API的变化
+从XTP交易到XTP-Pro交易API的变化
+接口使用说明
+API接口说明与示例代码
+算法API接口说明与示例代码
+范例和教程
+关于L2行情数据回补功能的使用说明
+行情XQuote-API断线后应对措施
+交易分页查询示例代码
+资金划拨接口的示例代码
+新股申购逻辑示例代码
+配股逻辑示例代码
+Pro行情旧版配置文件参数说明
+帮助文档
+行情服务接入前指引
+API常见问题
+错误代码速查表
+Python版本SDK编译库说明
+算法流控及母单参数类型说明
+算法流控及母单参数示例
+订单的状态机图
+页面导航
+XTP-Pro行情XQuote-API使用示例说明
+目录
+1. 行情库介绍
+1.1. 头文件
+1.2. 库文件
+1.3. 接口说明
+2. Quick Start
+2.1. 创建Api实例
+2.2. 初始化Api参数
+2.3. 创建Spi类
+2.4. 创建Spi实例
+2.5. 注册Spi
+2.6. 登陆行情服务器
+2.7. 查询行情静态信息
+2.8. 订阅行情
+2.9. 处理回调消息
+2.10. 断线重连
+3. 行情订阅需注意的问题
+4. 简单Demo示例代码
+1. 行情库介绍   ​
+该文档旨在帮助开发者快速使用极速交易平台XTP-Pro的行情API，文中是XQuote-API接口调用示例。
+1.1. 头文件  ​
+文件名  详情
+xtpx_quote_api.h   行情接口头文件，行情订阅接口类。
+xquote_x_api_data_type.h   行情的数据基本类型。
+xtpx_api_data_type.h   兼容数据的基本类型。
+xtpx_api_struct_common.h   定义业务公共数据结构。
+xquote_x_api_struct.h   定义行情所需数据结构。
+xquote_x_api_rebuild_tbt_struct.h   定义行情回补所需数据结构。
+1.2. 库文件  ​
+适用系统  文件名
+windows   xtpxquoteapi.dll xtpxquoteapi.lib
+linux   libxtpxquoteapi.so
+1.3. 接口说明  ​
+(1) 行情API提供了两个接口类：行情订阅类QuoteApi接口和行情回调类QuoteSpi接口。
+(2) 行情通知是通过异步方式提供。
+(3) 客户端应用程序可通过QuoteApi发出订阅行情请求，通过继承QuoteSpi并重写回调函数来响应后台服务，处理行情数据。
+(4) XTP的库文件目前只支持64位的，注意创建64位的工程，并且设置64位的编译器来进行编译。
+2. Quick Start   ​
+2.1. 创建Api实例  ​
+示例代码如下：
+cpp
+XTPX  ::  API  ::QuoteApi  *   m_pQuoteApi   =   NULL  ;
+uint8_t   client_id   =   1  ;  //一个进程一个client id，可在[1, 24]区间内任选，并固定下来
+std  ::string save_file_path   =   "./"  ;  //保存xtp api日志的路径，需要有可读写权限
+XTPX  ::  API  ::XTP_PROTOCOL_TYPE quote_protocol   =   XTPX  ::  API  ::XTP_PROTOCOL_UDP;  //xtp api日志的输出级别，建议调试时使用debug级别，正常运行时使用info级别
+bool   udpseq_output   =   false  ;  //控制异步日志输出的参数，异步日志是用来排查udp行情数据包丢包问题的，行情稳定时，可以关闭异步日志的输出
+///创建QuoteApi
+m_pQuoteApi   =   XTPX  ::  API  ::  QuoteApi  ::  CreateQuoteApi  (client_id, save_file_path.  c_str  (), log_level, udpseq_output);
+if   (  NULL   ==   m_pQuoteApi)
+{
+//创建API失败
+}
+2.2. 初始化Api参数  ​
+（1）设定心跳超时时间 示例代码如下：
+cpp
+///设定行情服务器超时时间，单位为秒，默认是15s，调试时可以设定大点
+uint32_t   heat_beat_interval   =   15  ;
+m_pQuoteApi->  SetHeartBeatInterval  (heat_beat_interval);
+（2）设置行情接收的配置文件 对于udp连接方式的行情服务器，在登录之前，需要设置配置文件，此接口只针对udp连接方式的行情环境有效。
+示例代码如下：
+cpp
+std  ::string filename   =   "D:/MyProject/etc/example_config/quote_config.ini"  ;  //包含绝对路径的配置文件名
+bool   ret   =   m_pQuoteApi->  SetConfigFile  (filename.  c_str  ());
+if  (  false   ==   ret)
+{
+///设置配置文件失败，请检查下配置文件是否正确
+}
+quote_config.ini配置文件设置参数参考如下：
+cpp
+[  md  ]
+decode_flag = 1  #1表示解码的快照数据，目前api提供的只有解码的行情数据
+parse_cpu_id = 2 #解析线程绑核的cpu核id(逻辑核)，0表示不绑核
+[md.normal]
+enable = ON  #ON 表示启用软件行情的快照， OFF表示不启用
+local_ip = 127.0.0.1  #接收快照所在组播组的网段的网卡地址
+recv_cpu_id = 3  #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+enable_efvi = OFF #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256 #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8  #二级缓存的大小，最小为8k个缓存单元
+[md.fpga]
+enable = OFF #ON表示启用硬件行情的快照，OFF表示不启用
+local_ip = 127.0.0.1 #接收快照所在组播组的网段的网卡地址
+recv_cpu_id = 3 #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+enable_efvi = OFF #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256 #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8   #二级缓存的大小，最小为8k个缓存单元
+[tbt]
+decode_flag = 1   #1表示解码的逐笔数据，目前api提供的只有解码的行情数据
+parse_cpu_id = 4  #解析线程绑核的cpu核id(逻辑核)，0表示不绑核
+[tbt.normal]
+enable = ON  #ON表示启用软件行情的逐笔，OFF表示不启用
+local_ip = 127.0.0.1 #接收逐笔数据所在组播组的网段的网卡地址
+recv_cpu_id = 5   #接收线程绑核的cpu核id(逻辑核),0表示不绑核
+enable_efvi = OFF  #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256  #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8  #二级缓存的大小，最小为8k个缓存单元
+[tbt.fpga]
+enable = OFF   #ON表示启用硬件行情的逐笔，OFF表示不启用
+local_ip = 127.0.0.1 #接收逐笔数据所在组播组的网段的网卡地址
+recv_cpu_id = 5  #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+enable_efvi = OFF  #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256  #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8   #二级缓存的大小，最小为8k个缓存单元
+[ob]
+decode_flag = 1    #1表示解码的订单簿数据，目前api提供的只有解码的行情数据。
+parse_cpu_id = 6    #解析线程绑核的cpu核id(逻辑核)，0表示不绑核
+[ob.normal]
+enable = ON  #ON表示启用软件行情的订单簿，OFF表示不启用
+local_ip = 127.0.0.1  #接收订单簿所在组播组的网段的网卡地址
+recv_cpu_id = 7     #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+enable_efvi = OFF   #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256  #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8   #二级缓存的大小，最小为8k个缓存单元
+[subscribe_quote_type]
+sh_ob = OFF          #上海订单簿行情是否打开标志，OFF:关闭，ON：打开
+sz_ob = OFF          #深圳订单簿行情是否打开标志，OFF:关闭，ON：打开
+sh_level1_rawtxt = OFF  #L1沪市指数通行情是否打开标识
+sh_level1_md_index = ON #L1沪市指数快照行情是否打开标识
+sh_level1_md_stock = ON #L1 沪市股票快照行情是否打开标识
+sh_level1_md_option = ON  #L1 沪市期权快照行情是否打开标识
+sh_level2_md_index = ON  #L2 沪市指数快照行情是否打开标识
+sh_level2_md_stock = ON  #L2 沪市股票快照行情是否打开标识
+sh_level2_md_bond = ON  #L2 沪市债券快照行情是否打开标识
+sh_level2_tbt_stock = ON  #L2 沪市股票逐笔行情是否打开标识
+sh_level2_tbt_bond = ON  #L2 沪市债券逐笔行情是否打开标识
+sz_level1_md_index = ON  #L1 深市指数快照行情是否打开标识
+sz_level1_md_stock = ON  #L1 深市股票快照行情是否打开标识
+sz_level1_md_option = ON  #L1 深市期权快照行情是否打开标识
+sz_level1_md_bond = ON  #L1 深市债券行情是否打开标识
+sz_level2_md_index = ON  #L2 深市指数快照行情是否打开标识
+sz_level2_md_stock = ON  #L2 深市股票快照行情是否打开标识
+sz_level2_md_bond = ON  #L2 深市债券快照行情是否打开标识
+sz_level2_tbt_stock = ON  #L2 深市股票逐笔行情是否打开标识
+sz_level2_tbt_bond = ON  #L2 深市债券逐笔行情是否打开标识
+nq_rawtxt = OFF       #新三板指数通行情是否打开标识
+nq_md_bond = OFF    #新三板债券快照行情是否打开标识
+nq_tbt_bond = OFF    #新三板债券逐笔行情是否打开标识
+#以下为指数通indexpress订阅配置
+sh_level1_rawtxt = ON
+#以下为港股通hkc相关订阅配置
+sz_level1_md_hkc = ON
+sz_level1_md_hkcsta = ON
+2.3. 创建Spi类  ​
+如果想要获取行情数据，必须得有自己的回调响应类。下面仅以快照行情为例，创建了一个Spi回调响应类MyQuoteSpi，具体步骤如下：
+（1）继承XTPX::API::QuoteSpi，创建自己的Spi类MyQuoteSpi
+quote_spi.h文件,行情回调类接口定义：
+cpp
+#include   "xtpx_quote_api.h"
+using   namespace   XTPX  ::  API  ;
+class   MyQuoteSpi   :   public   QuoteSpi
+{
+public:
+MyQuoteSpi  ();
+~MyQuoteSpi  ();
+///行情服务器断线通知
+void   OnDisconnected  (  int   reason  );
+///订阅快照行情应答
+void   OnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  );
+///订阅快照行情应答
+void   OnUnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  );
+///查询合约完整静态信息的应答
+void   OnQueryAllTickersFullInfo  (  XTPQFI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  );
+///快照行情通知，包含买一卖一队列
+void   OnDepthMarketData  (  XTPMD   *  market_data  ,   int64_t   bid1_qty  [],   int32_t   bid1_count  ,   int32_t   max_bid1_count  ,   int64_t   ask1_qty  [],   int32_t   ask1_count  ,   int32_t   max_ask1_count  );
+/// 快照行情中ETF的IOPV通知
+void   OnETFIOPVData  (  IOPV   *  iopv  );
+//TODO:如果需要订阅其他行情，请继续重写其他行情回调函数
+};
+（2）重写回调函数逻辑 quote_spi.cpp文件，行情回调类接口实现：
+cpp
+#include   "quote_spi.h"
+#include   <iostream>
+using   namespace   std  ;
+extern   XTPX  ::  API  ::QuoteApi  *   m_pQuoteApi;
+MyQuoteSpi  ::  MyQuoteSpi  ()
+{
+}
+MyQuoteSpi  ::  ~  MyQuoteSpi  ()
+{
+}
+void   MyQuoteSpi  ::  OnDisconnected  (  int   reason  )
+{
+//行情服务器断线后，此函数会被调用
+//TODO:重新login，并在login成功后，再次订阅
+}
+void   MyQuoteSpi  ::  OnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  )
+{
+if   (error_info   &&   error_info->error_id   !=   0  )
+{
+//订阅失败
+cout   <<   "OnSubMarketData -----"   <<   "error_id = "   <<   error_info->error_id   <<   ", error_msg = "   <<   error_info->error_msg   <<   endl;
+return  ;
+}
+//订阅成功
+//TODO:当is_last == true时，触发其他用户逻辑
+}
+void   MyQuoteSpi  ::  OnUnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  )
+{
+if   (error_info   &&   error_info->error_id   !=   0  )
+{
+//取消订阅失败
+cout   <<   "OnUnSubMarketData -----"   <<   "error_id = "   <<   error_info->error_id   <<   ", error_msg = "   <<   error_info->error_msg   <<   endl;
+return  ;
+}
+//退阅成功
+//TODO:当is_last == true时，触发其他用户逻辑
+}
+void   MyQuoteSpi  ::  OnQueryAllTickersFullInfo  (  XTPQFI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  )
+{
+if   (error_info   &&   error_info->error_id   !=   0  )
+{
+//查询失败
+cout   <<   "OnQueryAllTickersFullInfo -----"   <<   "error_id = "   <<   error_info->error_id   <<   ", error_msg = "   <<   error_info->error_msg   <<   endl;
+return  ;
+}
+//查询成功
+//TODO:将查询结果缓存
+//如果是最后一个响应，通知后续逻辑
+if   (is_last   ==   true  )
+{
+//TODO:通知后续逻辑，例如可以在查询沪市结束后，再次发起查询深市的查询请求
+if   (ticker_info->exchange_id   ==   XTP_EXCHANGE_SH)
+{
+//当沪市的静态行情查询完毕后，查询深市行情静态信息
+m_pQuoteApi->  QueryAllTickersFullInfo  (XTP_EXCHANGE_SZ);
+}
+else
+{
+//TODO:触发后续逻辑
+}
+}
+}
+void   MyQuoteSpi  ::  OnDepthMarketData  (  XTPMD   *  market_data  ,   int64_t   bid1_qty  [],   int32_t   bid1_count  ,   int32_t   max_bid1_count  ,   int64_t   ask1_qty  [],   int32_t   ask1_count  ,   int32_t   max_ask1_count  )
+{
+//收到行情快照数据
+//TODO:用户处理逻辑，注意此处不能仅仅保存数据的指针，指针所指向的内存数据将在此函数return后失效
+}
+void    MyQuoteSpi  ::  OnETFIOPVData  (  IOPV   *  iopv  )
+{
+//收到行情快照中ETF的IOPV信息
+//TODO:用户处理逻辑
+}
+2.4. 创建Spi实例  ​
+示例代码如下：
+cpp
+//创建Spi实例
+MyQuoteSpi  *   m_pQuoteSpi   =   new   MyQuoteSpi  ();
+2.5. 注册Spi  ​
+示例代码如下：
+cpp
+//注册Spi
+m_pQuoteApi->  RegisterSpi  (m_pQuoteSpi);
+2.6. 登陆行情服务器  ​
+示例代码如下：
+cpp
+std  ::string quote_server_ip   =   "xxx.xxx.xxx.xxx"  ;  //行情服务器ip地址
+int   quote_server_port   =   xxx;  //行情服务器端口port
+std  ::string quote_username   =   "xxxxxxxx"  ;  //行情服务器的登陆账户名
+std  ::string quote_password   =   "xxxxxx"  ;  //行情服务器的登陆密码
+XTPX  ::  API  ::XTP_PROTOCOL_TYPE quote_protocol   =   XTPX  ::  API  ::XTP_PROTOCOL_UDP;  //实盘服务器请用UDP，公网测试环境均为TCP，以实际服务器支持的类型为准
+std  ::string local_ip   =   "xxx.xxx.xxx.xxx"  ;  //本地网卡对应的ip
+int   ret   =   m_pQuoteApi->  Login  (quote_server_ip.  c_str  (), quote_server_port, quote_username.  c_str  (), quote_password.  c_str  (), protocol_type, local_ip.  c_str  ());
+if   (  0   !=   ret)
+{
+// 登录失败，获取错误信息
+XTPRI  *   error_info   =   m_pQuoteApi->  GetApiLastError  ();
+std  ::cout   <<   "login to server error, "   <<   error_info->error_id   <<   " : "   <<   error_info->error_msg   <<   std  ::endl;
+return   0  ;
+}
+// 登录成功
+//TODO: 用户逻辑，例如查询静态数据、订阅行情等
+2.7. 查询行情静态信息  ​
+一次只能查单个市场，如果需要查沪深2市场，需要 。
+请在一个市场查询结果全部回来后再发起另一个市场的查询，否则容易引起断线。
+示例代码如下：
+cpp
+//查询沪市行情静态信息
+m_pQuoteApi->  QueryAllTickersFullInfo  (  XTPX  ::  API  ::XTP_EXCHANGE_SH);
+2.8. 订阅行情  ​
+采用 方式连接的行情服务器,推荐使用 单订阅行情。
+采用 方式连接的行情服务器，推荐使用 进行全市场订阅。用户调用全订阅函数时，需通过返回值判断接口调用是否成功(有些情况下会返回失败)。 下面以单订阅2只股票为例,示例代码如下：
+cpp
+// 申请内存
+int   ticker_count   =   2  ;  //需要订阅行情的证券代码数量，可根据实际订阅需求改动
+char   **  ppInstrumentID   =   new   char*  [ticker_count];
+for   (  int   i   =   0  ; i   <   ticker_count; i  ++  )
+{
+ppInstrumentID[i]   =   new   char  [XTP_QUOTE_TICKER_LEN];
+}
+strcpy_s  (ppInstrumentID[  0  ], XTP_QUOTE_TICKER_LEN,   "600000"  );
+strcpy_s  (ppInstrumentID[  1  ], XTP_QUOTE_TICKER_LEN,   "600001"  );
+//订阅沪市的600000、600001两只股票快照行情
+m_pQuoteApi->  SubscribeMarketData  (ppInstrumentID, ticker_count,   XTPX  ::  API  ::XTP_EXCHANGE_SH);
+// 释放内存
+for   (  int   i   =   0  ; i   <   ticker_count; i  ++  ) {
+delete[]   ppInstrumentID[i];
+ppInstrumentID[i]   =   NULL  ;
+}
+delete[]   ppInstrumentID;
+ppInstrumentID   =   NULL  ;
+2.9. 处理回调消息  ​
+发起快照订阅请求后，无论是否订阅成功，Spi都将收到快照订阅响应。可根据需要重写 函数逻辑。
+如果快照订阅成功，快照行情将通过 回调函数推送给用户。此时用户可根据收到的行情数据重写程序逻辑。
+如果快照订阅种类为ETF，ETF的IOPV信息可以通过 回调函数推送给用户。此时用户可根据收到的IOPV数据重写程序逻辑。
+其余逐笔和订单簿行情，可参照快照行情进行订阅和重写函数逻辑。
+2.10. 断线重连  ​
+重写 回调函数，总体思路是调用 重连成功后，重新订阅快照行情。示例代码如下：
+cpp
+void   MyQuoteSpi  ::  OnDisconnected  (  int   reason  )
+{
+//行情服务器断线后，此函数会被调用
+//TODO:重新login，并在login成功后，再次订阅
+cout   <<   "Disconnect from quote server. "   <<   endl;
+//重新登陆行情服务器
+int   ret   =   -  1  ;
+while   (  0   !=   ret)
+{
+ret   =   m_pQuoteApi->  Login  (quote_server_ip.  c_str  (), quote_server_port, quote_username.  c_str  (), quote_password.  c_str  (), protocol_type);
+if   (  0   !=   ret)
+{
+// 登录失败，获取错误信息
+XTPRI  *   error_info   =   m_pQuoteApi->  GetApiLastError  ();
+cout   <<   "login to server error, "   <<   error_info->error_id   <<   " : "   <<   error_info->error_msg   <<   endl;
+//等待10s以后再次连接，可修改此等待时间，建议不要小于3s
+#ifdef   _WIN32
+Sleep  (  10000  );
+#else
+sleep  (  10  );
+#endif   // _WIN32
+}
+}
+//重连成功
+cout   <<   "login to server success. "   <<   endl;
+//再次订阅行情快照
+subscribeMarketData  ();
+}
+3. 行情订阅需注意的问题   ​
+(1) 实盘Level1行情服务器和Level2行情服务器是以 连接方式订阅行情。公网测试环境均使用 连接。
+(2) 登录之前，必须先调用接口 设置正确的配置文件，且该接口只能调用一次，重复调用将不起作用。用户在订阅行情之前，需将要订阅的行情，在配置文件里设置成打开标识，再调用订阅接口，如果配置错误或者调用订阅接口失败都将无法收到行情数据。 另外，如果连接的是UDP行情服务器，Api端根据配置文件中设定要订阅的行情种类来接收对应组播组全部行情数据，对于没有订阅的合约，Api在本地筛选过滤后推送。
+(3) 登录时， 可以是NULL, 但不能是空串，最好传入要使用的网卡上的ip。
+(4) 证券代码基本信息可通过 查询合约的完整静态信息，并在本地建立一个证券信息索引表。为了避免因缓存满而导致的断线，沪深交易所请分开查询，且在一个市场查询完成后，再发起查询另一个市场信息的查询请求。
+(5) 在行情回调函数中，请尽快处理行情数据并返回，否则可能会因为接收缓存满而导致断线。
+(8) 使用订阅/退订函数，请注意 使用。不支持全订阅后，再退订部分，或者订阅部分再全退订。
+4. 简单Demo示例代码   ​
+下面是一个简单的代码示例，演示了行情API通过TCP方式连接行情服务器的过程，包括：创建、初始化、登录行情、查询行情静态信息、订阅行情、断线重连。
+main.cpp文件
+cpp
+#include   <string>
+#include   <iostream>
+#ifdef   _WIN32
+#include   <windows.h>
+#else
+#include   <unistd.h>
+#endif   // _WIN32
+#include   "quote_spi.h"
+XTPX  ::  API  ::QuoteApi  *   m_pQuoteApi   =   NULL  ;  //全局变量，程序共用一个api
+std  ::string quote_server_ip   =   "xxx.xxx.xxx.xxx"  ;  //行情服务器ip地址
+int   quote_server_port   =   xxx;  //行情服务器端口port
+std  ::string quote_username   =   "xxxxxxxx"  ;  //行情服务器的登陆账户名
+std  ::string quote_password   =   "xxxxxx"  ;  //行情服务器的登陆密码
+XTPX  ::  API  ::XTP_PROTOCOL_TYPE quote_protocol   =   XTPX  ::  API  ::XTP_PROTOCOL_UDP;  //实盘服务器请用UDP，公网测试环境均为TCP，具体以运营通知为准
+std  ::string local_ip   =   "xxx.xxx.xxx.xxx"  ;  //本地网卡对应的ip
+int   main  ()
+{
+uint8_t   client_id   =   1  ;  //一个进程一个client id，可在[1, 24]区间内任选，并固定下来
+std  ::string save_file_path   =   "./"  ;  //保存xtp api日志的路径，需要有可读写权限
+XTPX  ::  API  ::XTP_LOG_LEVEL log_level   =   XTPX  ::  API  ::XTP_LOG_LEVEL_DEBUG;  //xtp api日志的输出级别，建议调试时使用debug级别，正常运行时使用info级别
+XTPX  ::  API  ::XTP_PROTOCOL_TYPE protocol_type   =   XTPX  ::  API  ::XTP_PROTOCOL_TCP;  //实盘服务器请用UDP，公网测试环境均为TCP，以实际服务器支持的类型为准
+///创建QuoteApi
+bool   udpseq_output   =   true  ;  //异步日志输出
+m_pQuoteApi   =   XTPX  ::  API  ::  QuoteApi  ::  CreateQuoteApi  (client_id, save_file_path.  c_str  (), log_level, udpseq_output);
+if   (  NULL   ==   m_pQuoteApi)
+{
+//创建API失败
+return   0  ;
+}
+///设定行情服务器超时时间，单位为秒，默认是15s，调试时可以设定大点
+uint32_t   heat_beat_interval   =   15  ;
+m_pQuoteApi->  SetHeartBeatInterval  (heat_beat_interval);
+//创建Spi实例
+MyQuoteSpi  *   m_pQuoteSpi   =   new   MyQuoteSpi  ();
+if   (  NULL   ==   m_pQuoteSpi)
+{
+//创建行情Spi失败
+return   0  ;
+}
+//以下是udp连接方式设置的配置文件
+//std::string filename = "D:/MyProject/etc/example_config/quote_config.ini";//包含绝对路径的配置文件名
+//bool ret = m_pQuoteApi->SetConfigFile(filename.c_str());
+//注册Spi
+m_pQuoteApi->  RegisterSpi  (m_pQuoteSpi);
+//登陆行情服务器
+int   ret   =   m_pQuoteApi->  Login  (quote_server_ip.  c_str  (), quote_server_port, quote_username.  c_str  (), quote_password.  c_str  (), protocol_type, local_ip.  c_str  ());
+if   (  0   !=   ret)
+{
+// 登录失败，获取错误信息
+XTPRI  *   error_info   =   m_pQuoteApi->  GetApiLastError  ();
+std  ::cout   <<   "login to server error, "   <<   error_info->error_id   <<   " : "   <<   error_info->error_msg   <<   std  ::endl;
+return   0  ;
+}
+// 登录成功
+//TODO: 用户逻辑，例如查询静态数据、订阅行情等，以下以查询沪市静态信息为例
+//查询沪市行情静态信息
+m_pQuoteApi->  QueryAllTickersFullInfo  (  XTP  ::  API4  ::XTP_EXCHANGE_SH);
+//保持主线程，防止程序退出
+while   (  true  )
+{
+#ifdef   _WIN32
+Sleep  (  10000  );
+#else
+sleep  (  10  );
+#endif   // _WIN32
+}
+return   0  ;
+}
+MyQuoteSpi类相关定义和实现文件。 quote_spi.h文件
+cpp
+#include   "xtpx_quote_api.h"
+using   namespace   XTPX  ::  API  ;
+class   MyQuoteSpi   :   public   QuoteSpi
+{
+public:
+MyQuoteSpi  ();
+~MyQuoteSpi  ();
+///行情服务器断线通知
+void   OnDisconnected  (  int   reason  );
+///订阅快照行情应答
+void   OnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  );
+///订阅快照行情应答
+void   OnUnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  );
+///查询合约完整静态信息的应答
+void   OnQueryAllTickersFullInfo  (  XTPQFI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  );
+///快照行情通知，包含买一卖一队列
+void   OnDepthMarketData  (  XTPMD   *  market_data  ,   int64_t   bid1_qty  [],   int32_t   bid1_count  ,   int32_t   max_bid1_count  ,   int64_t   ask1_qty  [],   int32_t   ask1_count  ,   int32_t   max_ask1_count  );
+/// 快照行情中ETF的IOPV通知
+void   OnETFIOPVData  (  IOPV   *  iopv  );
+//TODO:如果需要订阅其他行情，请继续重写其他行情回调函数
+private:
+void   subscribeMarketData  ();  //订阅行情
+};
+quote_spi.cpp文件
+cpp
+#include   "quote_spi.h"
+#include   <string>
+#include   <iostream>
+#ifdef   _WIN32
+#include   <windows.h>
+#else
+#include   <unistd.h>
+#endif   // _WIN32
+using   namespace   std  ;
+extern   XTPX  ::  API  ::QuoteApi  *   m_pQuoteApi;
+extern   std  ::string quote_server_ip;  //行情服务器ip地址
+extern   int   quote_server_port;  //行情服务器端口port
+extern   std  ::string quote_username;  //行情服务器的登陆账户名
+extern   std  ::string quote_password;  //行情服务器的登陆密码
+extern   XTPX  ::  API  ::XTP_PROTOCOL_TYPE protocol_type;  //实盘服务器请用UDP，公网测试环境均为TCP，具体以运营通知为准
+extern   std  ::string local_ip;  //本地网卡对应的ip
+MyQuoteSpi  ::  MyQuoteSpi  ()
+{
+}
+MyQuoteSpi  ::  ~  MyQuoteSpi  ()
+{
+}
+void   MyQuoteSpi  ::  OnDisconnected  (  int   reason  )
+{
+//行情服务器断线后，此函数会被调用
+//TODO:重新login，并在login成功后，再次订阅
+cout   <<   "Disconnect from quote server. "   <<   endl;
+//重新登陆行情服务器
+int   ret   =   -  1  ;
+while   (  0   !=   ret)
+{
+ret   =   m_pQuoteApi->  Login  (quote_server_ip.  c_str  (), quote_server_port, quote_username.  c_str  (), quote_password.  c_str  (), protocol_type, local_ip.  c_str  ());
+if   (  0   !=   ret)
+{
+// 登录失败，获取错误信息
+XTPRI  *   error_info   =   m_pQuoteApi->  GetApiLastError  ();
+cout   <<   "login to server error, "   <<   error_info->error_id   <<   " : "   <<   error_info->error_msg   <<   endl;
+//等待10s以后再次连接，可修改此等待时间，建议不要小于3s
+#ifdef   _WIN32
+Sleep  (  10000  );
+#else
+sleep  (  10  );
+#endif   // _WIN32
+}
+}
+//重连成功
+cout   <<   "login to server success. "   <<   endl;
+//再次订阅行情快照
+subscribeMarketData  ();
+}
+void   MyQuoteSpi  ::  OnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  )
+{
+if   (error_info   &&   error_info->error_id   !=   0  )
+{
+//订阅失败
+cout   <<   "OnSubMarketData -----"   <<   "error_id = "   <<   error_info->error_id   <<   ", error_msg = "   <<   error_info->error_msg   <<   endl;
+return  ;
+}
+//订阅成功
+//TODO:当is_last == true时，触发其他用户逻辑
+}
+void   MyQuoteSpi  ::  OnUnSubMarketData  (  XTPST   *  ticker  ,   XTPRI   *  error_info  ,   bool   is_last  )
+{
+if   (error_info   &&   error_info->error_id   !=   0  )
+{
+//取消订阅失败
+cout   <<   "OnUnSubMarketData -----"   <<   "error_id = "   <<   error_info->error_id   <<   ", error_msg = "   <<   error_info->error_msg   <<   endl;
+return  ;
+}
+//退阅成功
+//TODO:当is_last == true时，触发其他用户逻辑
+}
+void   MyQuoteSpi  ::  OnQueryAllTickersFullInfo  (  XTPQFI  *   ticker_info  ,   XTPRI   *  error_info  ,   bool   is_last  )
+{
+if   (error_info   &&   error_info->error_id   !=   0  )
+{
+//查询失败
+cout   <<   "OnQueryAllTickersFullInfo -----"   <<   "error_id = "   <<   error_info->error_id   <<   ", error_msg = "   <<   error_info->error_msg   <<   endl;
+return  ;
+}
+//查询成功
+//TODO:将查询结果缓存
+//如果是最后一个响应，通知后续逻辑
+if   (is_last   ==   true  )
+{
+//TODO:通知后续逻辑，例如可以在查询沪市结束后，再次发起查询深市的查询请求
+if   (ticker_info->exchange_id   ==   XTP_EXCHANGE_SH)
+{
+//当沪市的静态行情查询完毕后，查询深市行情静态信息
+m_pQuoteApi->  QueryAllTickersFullInfo  (XTP_EXCHANGE_SZ);
+}
+else
+{
+//TODO:触发后续逻辑，例如可以订阅快照行情
+subscribeMarketData  ();
+}
+}
+}
+void   MyQuoteSpi  ::  OnDepthMarketData  (  XTPMD   *  market_data  ,   int64_t   bid1_qty  [],   int32_t   bid1_count  ,   int32_t   max_bid1_count  ,   int64_t   ask1_qty  [],   int32_t   ask1_count  ,   int32_t   max_ask1_count  )
+{
+//收到行情快照数据
+//TODO:用户处理逻辑，注意此处不能仅仅保存数据的指针，指针所指向的内存数据将在此函数return后失效
+}
+void   MyQuoteSpi  ::  OnETFIOPVData  (  IOPV   *  iopv  )
+{
+//收到行情快照中ETF的IOPV数据
+//TODO:用户处理逻辑
+}
+void   MyQuoteSpi  ::  subscribeMarketData  ()
+{
+// 申请内存，初始化订阅参数
+int   ticker_count   =   2  ;  //需要订阅行情的证券代码数量，可根据实际订阅需求改动
+char   **  ppInstrumentID   =   new   char*  [ticker_count];
+for   (  int   i   =   0  ; i   <   ticker_count; i  ++  )
+{
+ppInstrumentID[i]   =   new   char  [XTP_QUOTE_TICKER_LEN];
+}
+strcpy_s  (ppInstrumentID[  0  ], XTP_QUOTE_TICKER_LEN,   "600000"  );
+strcpy_s  (ppInstrumentID[  1  ], XTP_QUOTE_TICKER_LEN,   "600001"  );
+//订阅沪市的600000、600001两只股票快照行情
+m_pQuoteApi->  SubscribeMarketData  (ppInstrumentID, ticker_count, XTP_EXCHANGE_SH);
+// 释放内存
+for   (  int   i   =   0  ; i   <   ticker_count; i  ++  ) {
+delete[]   ppInstrumentID[i];
+ppInstrumentID[i]   =   NULL  ;
+}
+delete[]   ppInstrumentID;
+ppInstrumentID   =   NULL  ;
+}
+最后更新:
+Pager
+下一页  交易XTrader-API使用指南QuickStart
+鲁ICP备09057662号 | 鲁公网安备 37010302000722号
+Copyright © 2015-2026 All Rights Reserved. 版权所有 中泰证券股份有限公司

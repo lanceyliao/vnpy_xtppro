@@ -1,0 +1,1266 @@
+XTP-Pro API文档
+Skip to content
+XTP-Pro API文档
+Search      K
+Main Navigation       业务列表
+Appearance
+Menu
+Return to top
+Sidebar Navigation
+快速入门
+行情XQuote-API使用指南QuickStart
+交易XTrader-API使用指南QuickStart
+算法XAlgo-API使用指南QuickStart
+升级使用说明
+从XTP行情到XTP-Pro行情API的变化
+从XTP交易到XTP-Pro交易API的变化
+接口使用说明
+API接口说明与示例代码
+算法API接口说明与示例代码
+范例和教程
+关于L2行情数据回补功能的使用说明
+行情XQuote-API断线后应对措施
+交易分页查询示例代码
+资金划拨接口的示例代码
+新股申购逻辑示例代码
+配股逻辑示例代码
+Pro行情旧版配置文件参数说明
+帮助文档
+行情服务接入前指引
+API常见问题
+错误代码速查表
+Python版本SDK编译库说明
+算法流控及母单参数类型说明
+算法流控及母单参数示例
+订单的状态机图
+页面导航
+XTP Pro API常见问题
+目录
+1．运行环境
+1.1. 运行环境
+1.2. 版本编译
+2. 行情FAQ
+2.1. 行情Quote-Api
+2.2. 行情Quote-Spi
+3．交易FAQ
+3.1. 交易Trader-Api
+3.2. 交易Trader-Spi
+4．算法FAQ
+4.1. 算法AlgoX-Api
+4.2. 算法AlgoX-Spi
+5．测试FAQ
+5.1. 测试账号
+5.2. 测试问题
+1．运行环境   ​
+1.1. 运行环境  ​
+1.1.1. 问：XTP-Pro的Api是否支持MacOS？
+答：目前支持Windows、Linux平台运行，但是不支持MacOS。
+1.1.2. 问：XTP推荐的系统运行环境有哪些？
+答：推荐系统windows 10、redhat7、ubuntu16、centos7。
+1.1.3. 问：我们的服务器是AMD的处理器，请问支持使用AMD的CPU吗？
+答：不支持ARM架构的CPU，我们底层只支持在X86架构的CPU上运行，Intel、AMD厂商的X86架构的CPU都支持。
+1.1.4. 问：XTP-Pro的Api只能在VS2015下编译运行么？
+答：windows系统推荐在win10，vs2015下编译运行，但不局限于此。其他版本的windows和vs可能需要安装部分补丁包和运行库。Linux版推荐ubuntu14，ubuntu16，redhat7.2。
+1.1.5. 问：在VS2015下程序编译可以通过，可是运行时提示确少某些运行库，怎么办？
+答：请下载缺少的库，并放置到对应的位置上，下载安装必要的redist补丁包，64位系统需选择vcredist_x64.exe。
+1.1.6. 问：VS2015下为什么编译的时候，发生链接错误？
+答：由于我们的库文件目前只支持64位的，所以请看一下默认的编译选项是否是x64的，如果不是，请选择x64进行编译。
+1.1.7. 问：上海和深圳机房的时间是PTP同步还是NTP同步的？
+答：windows下是使用NTP对时服务，linux下是使用chrony对时服务，如果需要使用机房内的时钟源，具体请查阅运维给的参数文档。
+1.2. 版本编译  ​
+1.2.1. 问：目前XTP-Pro SDK支持哪几种语言？
+答：目前XTP-Pro SDK支持的语言包括:
+C++（XTP官网下载链接： https://xtp.zts.com.cn/service/download）
+Python（外部下载链接： https://github.com/ztsec/xtp_pro_api_python）
+1.2.2. 问：XTP-Pro sdk提供了2个版本Linux库文件，onload-7.1.0.265 和 onload-8.1.2.26，怎么判断使用哪个版本的库呢？
+答：centos下的库文件，ubuntu系统也可以使用，具体使用哪个版本的库，请参照以下情况来选择：
+如果您的服务器没有Solarflare网卡，那就选择高版本onload-8.1.2.26的库；
+如果有Solarflare网卡，并且安装了7.1系列的onload，那就选择onload-7.1.0.265的库；
+如果有Solarflare网卡，并且安装了8.1系列的onload，那就选择onload-8.1.2.26的库。
+注意：我们使用的onload-8.1.2.26版本编译的库，如果您的onload版本过低或过高，开启 enable_efvi = ON 可能也无效。
+1.2.3. 问：目前交易支持的业务还不全面，如果想切换到XTP-Pro Api，是必须使用4.0 XTP-Pro行情 + 4.0 XTP-Pro交易吗？
+答：目前交易不是必须切换，XTP-Pro交易有些业务还在开发中，我们有2套系统并行运行的过渡期，可以先使用 4.0 XTP-Pro行情 + 3.0 XTP交易。
+1.2.4. 问：4.0 XTP-Pro行情 + 3.0 XTP 交易，在XTPApiDemo程序加入头文件 xapix_data_type.h 后，xtp_api_demo.cpp中调用CreateQuoteApi()、CreateTraderApi()，报错："XTP_LOG_LEVEL" 不明确的错误提示，怎么处理？
+答：XTP-Pro SDK 所有接口类和数据类型的域名是XTPX::API，如果XTP-Pro版本的行情与XTP版本的交易一起使用，编译遇到参数类型不明确的错误时，行情报错的接口参数类型前加XTPX::API::，交易报错的接口参数类型前加::，即可解决该域名问题。
+1.2.5. 问：xtpx_api_struct_common.h中定义的XTP_ERR_MSG_LEN，与xtp_api_struct_common.h中的XTP_ERR_MSG_LEN重名，编译Demo报错：warning C4091: “constexpr ”: 没有声明变量时忽略“int”的左侧，怎么处理？
+答：请参照以下说明来修改：
+在xtp_api_demo.cpp中，去掉包含 #include "xtp_trader_api.h"、#include "xtp_quote_api.h"
+在trade_spi.h中，保持包含 #include "xtp_trader_api.h" 添加域名 class MyTraderSpi : public XTP::API::TraderSpi
+在trade_spi.cpp中，引入命名空间 using namespace XTP::API;
+在quote_spi.h中，保持包含 #include "xtpx_quote_api.h" 添加域名 class MyQuoteSpi : public XTPX::API::QuoteSpi
+在quote_spi.cpp中，引入命名空间 using namespace XTPX::API;
+1.2.6. 问：升级Api版本，只需要替换.h头文件和.lib库文件，就可以直接运行吗？
+答：在.h头文件不变的情况下，可以直接替换动态库，无需重新编译；但如果.h头文件变化了，那就需要重新编译再运行。
+1.2.7. 问：demo没有工程文件，请问可以提供工程文件么？
+答：demo里包含cmake文件，请用cmake工具，选择好需要的generator，然后生成对应的工程文件。如果generate的时候找不到对应的编译器，请确认已经安装好了Visual Studio编译器，如果安装的编译器版本比较高，可以适当升级一下cmake至匹配的版本，再重新生成工程。
+1.2.8. 问：demo在Release模式下编译时提示找不到对应的库文件。
+答：请修改cmakelist文件中optimized后面引用的lib库文件名字，改成debug的库文件。
+1.2.9. 问：运行Demo程序时，报错：The config.json file parse error，请问这是什么错误？
+答：读取配置文件config.json失败，请从以下几个方面挨个检查：
+请检查VS中：项目的配置属性->调试->工作目录下，是否正确设置了文件路径；
+请检查config.json配置文件是否存在，最好和程序头文件放在同一目录；
+请检查config.json配置参数的语法是否正确。
+2. 行情FAQ   ​
+2.1. 行情Quote-Api  ​
+2.1.1. 问：同一个程序或进程中支持创建几个QuoteApi呢？
+答：同一个进程可创建多个QuoteApi，但是只有第一次传入CreateQuoteApi()的参数有效，多个QuoteApi共用一个client_id，共用一个xtpxquote.log日志。
+2.1.2. 问：如果要同时接收沪深Level2以及北交所行情，还是创建多个QuoteApi分别连不同的行情前置地址吗？
+答：XTP-Pro版本，一般情况下只需要创建一个QuoteApi，登录连接一个行情地址，就能同时订阅沪深Level2以及北交所、指数通、港股通多个不同的组播行情。
+先修改quote_config.ini订阅配置，并在login()之前读取该配置文件，再调用订阅行情接口。
+例如：
+订阅沪深L2股票快照的normal软件和fpga硬件行情，开启配置如下：
+(1) 在[md.normal]下开启 enable = ON，修改 local_ip 为20开头的网卡ip，如果绑核，需修改 parse_cpu_id、recv_cpu_id；
+(2) 在[md.fpga]下开启 enable = ON，修改 local_ip 为20开头的网卡ip，如果绑核，需修改 recv_cpu_id；
+(3) 在[subscribe_quote_type]下开启 sh_level2_md_stock = ON、sz_level2_md_stock = ON；
+注意：为避免丢包，还需做好参数调优，可参考：行情参数优化_XTP Pro版本.txt。
+2.1.3. 问：如果在一个程序里，要同时接收Level1和Level2快照行情，或者在南方机房同时接收沪深OB行情，也只需要创建一个QuoteApi吗？
+答：这2种特殊情况下，只创建一个QuoteApi就不够了。
+(1) 若在同一个程序里，同时接收L1和L2快照行情，如果要完全区分Level1和Level2快照数据，就需要配置2份quote_config.ini，创建2套QuoteApi实例，2个QuoteApi分别登录订阅，分别从2个OnDepthMarketData()接收数据。
+(2) 若在同一个程序里，同时接收20和30网段的OB行情，也要配置2份quote_config.ini，创建2套QuoteApi实例，2个QuoteApi分别登录订阅，分别从2个OnOrderBook()接收数据。
+2.1.4. 问：调用CreateQuoteApi()创建API时client_id取值范围是多少？同一个账户同时多点登录行情时，client_id可以相同么？
+答：XTP-Pro版本，行情不校验client_id值，client_id取值范围没有限制。同一个账户在多个QuoteApi客户端同时登录，client_id可以相同。
+2.1.5. 问：CreateQuoteApi()中的save_file_path必须输入么？
+答：必须输入，save_file_path是存储行情api日志文件的目录，而且必须是一个有可写权限的真实存在的路径。
+2.1.6. 问：CreateQuoteApi()中的log_level建议设置哪个级别呢？
+答：调试期间，建议设置为 XTP_LOG_LEVEL_DEBUG，输出的日志便于辅助定位问题，如果日志级别太高，没有该级别的日志，不会生成xtpxquote.log文件。
+调试顺畅后，实盘环境也可以开启DEBUG级别，目前DEBUG级别的xtpxquote.log日志也比较少，不会降低性能影响接收行情，同时生成的异步日志asynlog.***可以确认具体的丢包数量。
+注意：如果是INFO或更高日志级别，不会生成asynlog日志文件。
+2.1.7. 问：QuoteApi日志是同步写的log日志吗？
+答：xtpxquote.log是同步写的日志。UDP连接下asynlog.***行情日志是异步写的日志。
+2.1.8. 问：QuoteApi行情日志占用的存储空间比较大，需要定期手动清理吗？还是XTP会自动删除过期的日志？
+答：在权限允许的情况下，XTP会自动删除7天前的日志，同时建议您监控好硬盘的存储空间。
+2.1.9. 问：QuoteApi行情asynlog日志文件太大了，可以不生成这个日志文件吗？
+答：该异步日志默认是输出的，便于排查接收行情的丢包情况，如果行情调试稳定不丢包了，可以关闭不输出该日志，设置CreateQuoteApi() 入参 udpseq_output 为 false 即可。
+2.1.10. 问：QuoteApi每次使用其接口前，先要判断下他们是否为空值吗？
+答：一般是Release()销毁了QuoteApi导致了NULL，如果能确保程序不调用Release()释放API，就不用每次使用接口前先判断是否为空值。
+2.1.11. 问：退出行情程序时，需要调用Release()吗？
+答：不再使用QuoteApi接口对象时，在程序退出前，可调用Release()函数删除接口对象。
+2.1.12. 问：怎么查看QuoteApi动态链接库文件的版本号呢？
+答：程序中调用GetApiVersion()接口获取，返回值即为api的发行版本号。
+2.1.13. 问：quote.log中显示api version : 1.0.15，是QuoteApi的版本号吗？
+答：是的，跟GetApiVersion()接口获取的版本号一致。
+2.1.14. 问：当调用行情接口失败时，也没有回调返回error_info，如何知道失败原因？
+答：可以调用GetApiLastError()来获取失败原因。但如果本次调用Api接口没有出错，那么GetApiLastError()返回的是上一次的错误。
+2.1.15. 问：请问GetApiLastError()这个函数是线程安全的吗？会返回空吗？
+答：这个函数不是线程安全的，其他函数都是线程安全的。GetApiLastError()不会返回NULL。
+2.1.16. 问：RegisterSpi()函数的返回值是void，没有返回值如何判断是否调用成功了？
+答：如果没有注册成功的话，即使订阅行情成功了，也是收不到回调函数推送数据的。
+2.1.17. 问：不同进程中QuoteSpi是否会收到其他进程的订阅和查询消息呢？
+答：不会的，不同的进程QuoteSpi消息互不影响。
+2.1.18. 问：心跳检测是dll自己维护的吗？如果调整心跳时间是在哪里设置呢？
+答：API可以设定心跳检测时间，默认是15秒，如果您要调大心跳值，可调用SetHeartBeatInterval()接口设置，注意：此函数必须在Login()之前调用才生效。
+2.1.19. 问：如何判断程序中的心跳是否正常？建议SetHeartBeatInterval()设置心跳多长时间？
+答：心跳检测时间间隔默认是15秒，一般在断点调试时，会长时间没有消息通讯，如果心跳间隔值设置短了容易断线，可以适当设置大点，方便本地调试，比如设置1000秒试试。
+2.1.20. 问：一般多长时间会触发心跳超时断线？
+答：TCP连接下的超时，跟您设置的心跳时间有关，看下调用 SetHeartBeatInterval() 设置的参数，如果没有设置的话，默认是15秒，那么超时的时间最短是15秒，最长是30秒。
+2.1.21. 问：SetHeartBeatInterval()设置心跳是通过TCP发送的吗？在OnDisconnected()中重新登录之前需要再次设置心跳间隔么？
+答：心跳是通过TCP发送的，断线重连不需要再次设置心跳间隔时间。您在OnDisconnected()中重新登录时，如果心跳间隔是15秒，需要在15秒后再登录，否则会登录不成功。
+2.1.22. 问：在程序运行期间修改quote_config.ini配置，支持热更新吗？
+答：不支持热更新，必须在Login()登录之前调⽤SetConfigFile()函数，设置的行情配置参数才生效。
+2.1.23. 问：TCP连接方式下，需要调用SetConfigFile()接口读取quote_config.ini配置吗？
+答：测试环境是TCP连接不需要配置，实盘环境是UDP连接需要读取配置，请根据订阅需求配置quote_config.ini接收组播行情，并在login()前调用SetConfigFile()函数读取配置参数。
+注意：不需要订阅的行情，建议在quote_config.ini中设置为OFF，关闭订阅即可，不要直接删除配置项。
+2.1.24. 问：调用SetConfigFile()设置的filename，要包含quote_config.ini文件名吗？可以是相对路径吗？xtpxquote.log中报错如下：
+[ERROR]Unable to open config file: /build/quote_config.ini
+答：这个报错是读取quote_config.ini失败。filename要包含quote_config.ini文件名，建议设置为一个实际存在的绝对路径，而且不建议放在build目录下，如果是CMake生成工程文件，那创建的build文件夹可能会删除，就有可能连带删掉配置好的quote_config.ini。
+2.1.25. 问：SetConfigFile()设置filename是绝对路径而且包含文件名，xtpxquote.log中这个报错是什么原因呢？
+[ERROR]Unable to parse config file D:/XTPApiDemo/api/quote_config.ini
+答：应该是quote_config.ini文件格式不对。linux下文件是LF格式，windows下文件是CRLF格式，而且必须是UTF-8编码。
+windows下，可用记事本打开查看底部显示的格式：Windows(CRLF) 或 Unix(LF)；
+Linux下，可使用 file 命令快速识别，执行：file quote_config.ini 查看是哪种换行符格式。
+2.1.26. 问：配置好了quote_config.ini，在Login()之前也调用了SetConfigFile()，但是xtpxquote.log中有以下报错，是什么原因呢？
+[WARN]The corresponding configuration is missing in the configuration file.
+[ERROR][ERROR:10200305]The market data corresponding configuration cannot be found.
+答：这个报错是没有读取到quote_config.ini文件中的配置，在login()之前是否没有调用SetConfigFile()接口读取quote_config.ini配置？
+2.1.27. 问：接收逐笔使用[tbt.fpga]硬件行情比[tbt.normal]软件行情更快的话，只开启[tbt.fpga]是不是就可以？
+答：一般来说，fpga比normal行情更快，只开启fpga也减少了CPU和内存的消耗。但如果沪深2市的逐笔都需要接收，就得同时开启[tbt.normal]和[tbt.fpga]，因为南方机房只有深市的fpga行情，金桥机房只有沪市的fpga行情。
+2.1.28. 问：quote_config.ini中[tbt.normal]和[tbt.fpga]都设置 enable = ON，那是软件和硬件2路逐笔行情都会收到吗？
+答：normal软件⾏情和fpga硬件⾏情都开启的话，网卡上会收到这2路⾏情数据。但是API会对收到的2路行情自动择优，只推送更快的那一路行情给用户，⽤户在接收行情的回调通知中只会收到⼀份⾏情数据。
+2.1.29. 问：登录行情调用Login()设置了正确的local_ip，还要在quote_config.ini文件中设置local_ip吗？
+答：XTP-Pro实盘中，除了在Login()中设置local_ip，还需要在quote_config.ini中设置local_ip。
+注意：订阅OB行情时，login()登录传入的local_ip是20开头的网卡ip，但是，在quote_config.ini中配置local_ip时，南方机房需通过 20.99 网段接收SZOB，但需通过30.99 网段接收SHOB，金桥机房需通过30.101 网段接收SHOB、SZOB。
+2.1.30. 问：登录行情时，设置网卡地址local_ip可以填 “127.0.0.1”吗？
+答：不可以，如果传入127.0.0.1是默认本机，就连接不上服务器。local_ip不能输入空串，也不能输入curl ipinfo.io返回的公网IP地址，要传入实际使用的网卡IP，也就是windows下执行ipconfig或Linux下执行ifconfig返回的ipv4地址。
+2.1.31. 问：实盘环境，local_ip我填了实际使用的网卡ip: 10.99. . ，为什么获取逐笔行情失败呢？xtpxquote.log 报错如下：
+[ERROR]GroupBase::get_local_ip ioctl[SIOCGIFADDR] err: No such device.
+[ERROR]get_local_ip failed.
+答：实盘环境下，接收快照和逐笔行情的网卡ip是20网段的，不是10网段的，要改为跟行情地址对应网段的ip，南方机房是 20.99. . ，金桥机房是 20.101. . 。
+2.1.32. 问：在Linux环境下，local_ip填了实际使用的20网段ip，但是xtpxquote.log报错如下，什么原因呢？
+[ERROR]GroupBase::get_local_ip ioctl[SIOCGIFADDR] err: No such device.
+[ERROR]get_local_ip failed.
+答：是否quote_config.ini里local_ip多了不可见字符？执行命令：cat -v xtp_quote_config.ini 看下每行末尾是否有 ^M，在Linux环境下带^M，说明换行符是CR格式的，要修改为LF格式的。
+2.1.33. 问：我们之前连接行情时，Login()没有设置local_ip参数，也就是用的默认值NULL，没什么影响吧？
+答：如果不填local_ip，Api会自动去找别的网卡，虽然能登录成功，但如果找到的local_ip是其他网段的，比如是172.17网段，会导致收不到行情组播数据。
+2.1.34. 问：QuoteSpi中的回调线程是自动绑核的吗？
+答：Api没有主动绑核，TCP连接不需要绑核，UDP连接需要绑核。
+请在 quote_config.ini 中配置 parse_cpu_id、recv_cpu_id，或者调用SetUDPThreadAffinityArray()设置接收和解析行情线程绑定的cpu集合，如果不调用该接口，系统将自动采用quote_config.ini中的CPU配置。
+注意：要绑定靠后的核，如果填0就是不绑核，因为0号核可能因为资源竞争而导致CPU被系统占用。
+2.1.35. 问：调用SetUDPThreadAffinityArray()接口绑核，只要在调用Login()前调用就行吗？设置的cpu集合数组如何对应绑定的是哪种行情类型？
+答：如果调用该接口，必须在调用Login()前且完成SetConfigFile设置后调用，否则配置将无法生效。在绑核分配环节，Api会按数组从前往后的核序号依次分配给配置文件中md、ob、tbt、idxpress、hkc这些CPU设置项（enable为OFF的不会分配）。
+2.1.36. 问：使用UDP接收行情时，设置接收行情线程绑定的CPU，这个是逻辑CPU还是物理CPU呢？
+答：这个是逻辑CPU。XTP中提供的绑定CPU接口是核绑定，但不是核隔离。
+2.1.37. 问：在Linux系统下，设置parse_cpu_id = 1，绑定的核心是CPU1吗？
+答：是的，Linux中CPU核心编号通常从0开始，parse_cpu_id = 1 实际上绑定的是第二个逻辑核CPU1，Top命令查看CPU占用情况时，您会看到CPU1的消耗是100%。
+2.1.38. 问：在quote_config.ini中绑核的地方好多，以订阅[tbt]为例，是不是parse_cpu_id和recv_cpu_id各绑一个就可以了？
+答：如果只接收[tbt.normal]，parse_cpu_id和recv_cpu_id各绑定一个就可以，如果同时接收[tbt.fpga]，就需要再绑定一个recv_cpu_id，总共绑定3个核。如果核心充足，建议分别绑定到3个不同的核上，如果核心实在不够，同一种行情的2个recv_cpu_id绑定到相同的核上。
+2.1.39. 问：指定行情数据使用CPU后，行情数据处理的那个核会很忙，如果不指定，就每个核比较平均，是否可以指定2个CPU呢？
+答：不可以，行情接收线程和解析线程，只能分别指定一个CPU核心。
+2.1.40. 问：使用的Solarflare网卡，关闭efvi能正常接收行情，配置 enable_efvi = ON 开启efvi收不到行情，xtpxquote.log 中报错：
+[FATAL]recv_thread_efvi exit, ef_driver_open failed. rc[-2], [No such file or directory]..
+答：这个报错显示efvi驱动异常，应该是没有安装驱动。启用efvi接收行情，需要先安装onload驱动，驱动版本建议比8.1.2稍高一点，如果已安装相应版本的驱动，可能驱动没装好需要重装，但是不需要使用onload启动程序。
+2.1.41. 问：使用SF网卡，onload驱动安装的7.1版本，使用的.so库是onload-8.1.2.26版本，开启efvi收不到行情，xtpxquote.log 中报错：
+[FATAL]recv_thread_efvi exit, ef_vi_alloc_from_pd failed. rc[-22], [Invalid argument]..
+答：这个报错显示efvi驱动异常，应该是安装的onload驱动版本过低，需要升级驱动版本，建议安装8.1系列的版本，最好比8.1.2稍高一点的版本。
+2.1.42. 问：Solarflare X2522网卡接收行情时，安装了8.1.2.26的onload驱动，并且使用的8.1.2.26库，关闭efvi能正常接收，但是开启efvi收不到行情，这是什么原因呢？
+[FATAL]recv_thread_efvi exit, ef_vi_alloc_from_pd failed. rc[-1], [Operation not permitted]..
+答：执行 lspci | grep -i solarflare、lspci -v -s 06:00.0 这2条命令看下，可能X2522网卡的固件不是全功能版本，导致使用efvi有点问题，如果有多余的X2522网卡可以换下看看。
+2.1.43. 问：如果使用的solarflare网卡，[tbt.normal]和[tbt.fpga]都设置 enable_efvi = ON，会对api软解和fpga硬件行情都有效吗？
+答：安装好onload驱动后，开启efvi对normal软件和fpga硬件行情都有效。需要注意的是，不要使用onload启动程序，可能会和efvi冲突。
+2.1.44. 问：在quote_config.ini中的L1_buf_capacity、L2_buf_capacity 使用默认值就可以吗？
+答：默认值也可以，如果要修改的话，数量必须是2的幂次。我们在生产环境，同时接收normal和fpga软硬件行情，设置 L1_buf_capacity = 512 可以稳定不丢包。L2_buf_capacity只有快照需要用到，可以调整为 L2_buf_capacity = 64，如果是接收逐笔行情或OB行情，默认值 L2_buf_capacity = 8 即可。
+2.1.45. 问：XTP API接口是否为异步的？
+答：Login()、Logout()这类接口为同步阻塞式，不需要异步等待登录、登出成功，当函数返回即可以视为已经登录成功、登出成功，即可进行后续操作。其余所有接口均为异步的。
+2.1.46. 问：Login()登录行情连不上，xtpxquote.log有如下报错，可能是什么原因导致的呢？
+[ERROR:10200000]Login to quote server failed: the quote authentication server offline
+答：这个报错是与服务器不连通，如果服务器已开启，服务器IP、Port是否输错？ 能否ping通服务器地址？telnet [主机地址] [端口号] 通吗？local_ip是否输错？请逐项排查。
+2.1.47. 问：调用Login()登录行情服务器，xtpxquote.log中错误提示如下，是什么问题？
+[ERROR:12110001]Login auth server failed with 12110001.
+答：Login()传入的用户名不正确，您检查一下用户名是否输错了？是否多了空格之类的符号。是否该资金账号从XTP转入XTP-Pro，之后又转回了XTP？
+2.1.48. 问：实盘环境，调用Login()登录行情服务器，xtpxquote.log中错误提示如下：
+[ERROR]failed tcp bind -> 10.25.**.** (null) - getaddrinfo return 'No such host is known.'
+[ERROR]failed tcp bind 10.25.**.**:(null)
+答：Login()传入的local_ip是否不对？再看下这里传入的字符指针，要传入实际使用的网卡IP, 也就是 windows下执行ipconfig 或 Linux下执行ifconfig返回的ipv4地址。
+2.1.49. 问：程序在测试环境下可以收到逐笔的，但是实盘账号连生产环境时收不到L2行情的快照和逐笔，xtpxquote.log中错误提示：
+[WARN]The corresponding configuration is missing in the configuration file.
+[ERROR][ERROR:10200305]The market data corresponding configuration cannot be found.
+[WARN]The corresponding configuration is missing in the configuration file.
+[ERROR][ERROR:10200305]The tbt corresponding configuration cannot be found.
+答：实盘账号是否开通了Level2权限？登录前是否调用了SetConfigFile()读取quote_config.ini订阅配置？读取配置传入的路径是否包含了文件名？并且Login()参数 sock_type 要填 XTP_PROTOCOL_UDP，才能接收UDP组播行情，请逐项排查。
+2.1.50. 问：升级API版本，替换了最新的库文件和头文件，调用Login()登录行情报错，xtpxquote.log中该错误是什么原因呢？
+[ERROR][ERROR:10200300]Failed to unsubscribe all tbt: invalid parameters.
+答：登录失败却报错提示unsubscribe，应该是头文件和库文件版本不一致，请将所有的头文件和库文件一起更新，然后重新编译再运行。
+2.1.51. 问：XTP-Pro平台系统支持过夜么？可以每天早上调用Login()，晚上自动Logout()吗？
+答：XTP服务器和API都不支持过夜，只支持当日交易时间段。策略程序必须每日重启，需要用户手动销毁QuoteApi，T+1日再重新开启程序，调用CreateQuoteApi()重新创建Api，再Login()。
+2.1.52. 问：如果只是调用Logout()登出，并不退出程序，需要调用Release()吗？
+答：Logout()只是登出，还可以再Login()，不退出程序就不要调用Release()。
+2.1.53. 问：获取沪深几只股票的快照实时行情，是调用哪个接口呢
+答：调用SubscribeMarketData()接口订阅，实盘环境UDP连接下，还要在quote_config.ini中[md.normal]或[md.fpga]下设置enable = ON开启订阅。
+2.1.54. 问：SubscribeMarketData()订阅行情，包括指数行情吗？如：中证500指数。
+答：包括指数行情，也有中证500指数，但是不包括所有的中证指数。比如：中证指数2000里的932000，快照行情里没有该指数，但是指数通行情有推送，可以订阅指数通行情获取。
+2.1.55. 问：SubscribeMarketData()接口中传入股票代码ticker字段有什么要求？
+答：ticker只需要填合约代码，不用带SH/SZ字符，要以’\0’结尾，并且不能带任何空格。
+2.1.56. 问：使用SubscribeMarketData()接口能一次性订阅沪深两市的股票快照吗？
+答：不能，只能一次性订阅同一证券交易所的多个合约，如果要订阅沪深两市的合约，那就要分2个交易所类型调用两次。
+2.1.57. 问：为什么Level2行情是用TCP订阅的MarketData？
+答：所有的订阅都是通过TCP发起的请求，只是使用UDP来接收组播行情数据的。
+2.1.58. 问：在每次重新订阅快照之前，如果要把之前订阅的个别股票先取消订阅，是调用哪个接口？
+答：调用UnSubscribeMarketData()即可取消之前的个别订阅。
+2.1.59. 问：如果有一只股票已经订阅过了，还没有退订，然后在某个地方又发起了订阅请求，这样会有什么影响吗？
+答：允许重复订阅，不影响。但是建议配对使用订阅和退订。
+2.1.60. 问：如何订阅沪深全市场的股票快照行情？
+答：如果是订阅沪深全市场快照行情，可使用SubscribeAllMarketData()接口订阅，参数exchange_id为XTP_EXCHANGE_UNKNOWN，表示沪深全市场，不包括新三板。
+2.1.61. 问：XTP-Pro中调用SubscribeAllMarketData()可以同时订阅沪深和北交所的快照吗？
+答：不可以，SubscribeAllMarketData()市场默认是XTP_EXCHANGE_UNKNOWN，只有沪深全市场的快照，不包括北交所市场的快照。
+订阅北交所快照需调用 SubscribeAllMarketData(XTP_EXCHANGE_NQ)，同时在quote_config.ini中设置 nq_rawtxt = ON 开启订阅北交所股票，目前北交所债券还没有部署（nq_md_bond = OFF、nq_tbt_bond = OFF）。
+2.1.62. 问：调用SubscribeAllMarketData()可以获取期权行情吗？
+答：SubscribeAllMarketData()不包括期权，如果是订阅单市场的期权快照，可调用SubscribeMarketData()接口，如果要订阅全市场的期权快照，就要调用SubscribeAllOptionMarketData()接口。
+2.1.63. 问：XTP-Pro中，调用SubscribeOrderBook()可以订阅北交所的订单簿行情吗？
+答：不可以，新三板不支持订单簿行情。
+2.1.64. 问：XTP-Pro实盘下，调用SubscribeAllOrderBook()订阅订单簿行情，为什么没有数据推送呢？
+答：请先确认是否已经开通了level2权限？quote_config.ini配置中[ob.normal]是否开启了enable = ON？是否使用的UDP连接？防火墙是否已关闭？另外，集合竞价期间没有orderbook，要到9:30才开始推送orderbook。连续竞价期间停盘的合约也不会推送orderbook。
+2.1.65. 问：XTP-Pro实盘下，调用UnSubscribeOrderBook()可以取消订阅的多个订单簿行情吗？
+答：可以一次性取消订阅同一证券交易所的多个合约OrderBook行情，需要与订阅行情订单簿接口配套使用。
+2.1.66. 问：调用SubscribeTickByTick()订阅期权逐笔行情，为什么没有数据推送呢？
+答：期权没有逐笔数据，只有5档快照数据，订阅成功也没有数据推送。
+2.1.67. 问：取消之前订阅的个别沪深逐笔行情，是调用哪个接口呢？
+答：调用UnSubscribeTickByTick()可以一次性取消订阅同一证券交易所的多个合约，需要与订阅逐笔行情接口配套使用。
+2.1.68. 问：调用SubscribeAllTickByTick()订阅可转债逐笔行情，并且在quote_config.ini中设置了sz_level2_tbt_bond = ON，为啥收不到可转债行情？
+答：沪市的可转债的类别是bond，设置sh_level2_tbt_bond = ON，但是深市的可转债是在股票分类中，要设置 sz_level2_tbt_stock = ON才能收到可转行情，sz_level2_tbt_bond对应的是债券的回购和债券现券相关的合约行情。
+2.1.69. 问：在同一个进程中，如果先调用SubscribeTickByTick()订阅个别股票，然后调用UnSubscribeTickByTick()取消订阅，会影响到之前调用的SubscribeAllTickByTick()吗？
+答：不建议这么做。如果调用了SubscribeAllTickByTick()，就不用重复调用SubscribeTickByTick()，并且SubscribeAllTickByTick()要和UnSubscribeAllTickByTick()配对使用。
+2.1.70. 问：XTP有查询所有可交易股票的接口吗？
+答：可通过QueryAllTickersFullInfo()或QueryAllTickers()接口来获取所有可交易合约，包括当天停牌的股票、债券。
+2.1.71. 问：QueryAllTickers()获取的合约静态信息中包括指数吗？
+答：不包括指数，该接口查询对应市场的可交易合约（股票/基金/债券/期权）基本信息。指数的静态信息需调用QueryAllTickersFullInfo()获取。
+2.1.72. 问：QueryAllTickers()获取不到交易日停牌的股票静态信息？
+答：可以获取到停牌的股票静态信息。建议使用QueryAllTickersFullInfo()来获取所有合约的静态信息，而且包括指数等不可交易的合约。
+2.1.73. 问：交易日开盘前，想要获取当日股票的涨跌停价格，有接口吗？
+答：9:15之前可通过QueryAllTickers()或 QueryAllTickersFullInfo() 获取涨跌停价，参见 upper_limit_price、lower_limit_price字段。
+2.1.74. 问：只能通过订阅快照的方式获取股票行情的最新价吗？
+答：还可以查询获取，可调用QueryTickersPriceInfo()获取合约的最新价格信息。
+2.1.75. 问：QueryAllTickersPriceInfo()可以一次性获取沪深2市所有合约的最新价吗？
+答：不能，仅支持单市场查询，沪深2市要分别调用2次指定市场来查询。
+2.1.76. 问：SubscribeAllOptionMarketData()可以一次性订阅沪深2市的期权快照吗？
+答：可以，默认值是XTP_EXCHANGE_UNKNOWN，表示沪深全市场，不包括新三板。
+2.1.77. 问：在行情数据里，如何区分一个证券代码是股票还是指数呢？
+答：可调用QueryAllTickersFullInfo()接口查询，通过返回的security_type 获取证券详细分类，这类静态数据在开盘之前获取一次，然后在本地做个映射，盘中就不需要多次向服务器发起查询请求。
+2.1.78. 问：从行情静态信息里取到的信息，可以用股票类型（风险警示板）以及股票名称中的ST来判断ST股票吗？
+答：可以这样判断，判断股票类型是调用QueryAllTickersFullInfo()，如果返回的XTPQuoteFullInfo.security_status 为 XTP_SECURITY_STATUS_ST，则说明该合约属于风险警示板。
+2.1.79. 问：QueryAllTickersFullInfo()会返回北交所合约的静态数据吗？
+答：不会，这个接口只返回沪深2市合约的详细静态信息，要调用 QueryAllNQTickersFullInfo() 获取北交所合约的详细静态信息。
+2.1.80. 问：QueryTickersLatestMarketData()能查询股票最新的十档快照行情吗？
+答：可以，该接口能查询到股票、基金、债券、期权最新的一次快照行情。
+2.1.81. 问：idxpress是什么行情呢，调用哪个接口可获取该类行情？
+答：idxpress是指数通行情，包括各种核心指数行情，但是不包括所有的指数行情。在UDP连接下，可修改quote_config.ini配置文件，将[idxpress]设置enable = ON开启订阅，并调用SubscribeAllIndexPress()接口订阅，接收指数通行情是OnIndexPress()回调接口。
+2.1.82. 问：如果关掉[idxpress]设置enable = OFF，是否还能接收沪深快照里的指数行情？
+答：还能接收，关掉[idxpress]不影响接收沪深指数快照，沪深指数快照的开关是[subscribe_quote_type]下的_md_index。
+2.1.83. 问：调用了SubscribeAllMarketData()订阅指数快照行情，还需要再调用SubscribeAllIndexPress()吗？
+答：请根据实际需要来决定是否都订阅。SubscribeAllMarketData()可以订阅指数快照，但是不包括所有的中证指数，如果指数通里有这些中证指数，那么就需要调用SubscribeAllIndexPress()获取。
+2.1.84. 问：调用了SubscribeAllMarketData()订阅指数快照行情，可以调用UnSubscribeAllIndexPress()取消订阅指数通行情吗？
+答：不可以，订阅/退订要配对使用，SubscribeAllMarketData()和UnSubscribeAllMarketData，SubscribeAllIndexPress()和UnSubscribeAllIndexPress()才有效。
+2.1.85. 问：在TCP连接下，调用SubscribeAllHKCMarketData()，为什么没有推送行情数据呢？
+答：TCP模式下不支持港股通行情，只能在实盘UDP连接下订阅港股通才有行情推送。
+2.1.86. 问：UDP连接下，取消订阅港股通行情是调用哪个接口？
+答：调用UnSubscribeAllHKCMarketData()即可取消。
+2.1.87. 问：盘中发现Level2接收的逐笔行情有丢包，如何回补缺失的行情数据？
+答：XTP-Pro中不需要登录行情回补服务器，在当天17点行情服务器关闭前，只需要调用RequestRebuildQuote()请求回补指定行情即可。
+注意：不支持回补北交所行情。
+2.1.88. 问：RequestRebuildQuote()接口，并发请求回补行情，会有问题吗？
+答：一个QuoteApi实例只能有一个回补连接。如果请求的时候使用了多线程，由于底层通讯还是一个，实际上还是顺序请求。如果是开启了多个实例，那么多个实例就是多个连接。
+2.1.89. 问：调用RequestRebuildQuote()请求回补行情时，一次性最多请求多少个数据？
+答：一次性回补最多1000个数据，超过1000个需要分批次请求，而且一次只能指定一种类型的数据，要么是快照数据，要么是逐笔数据。
+2.1.90. 问：盘中实时回补行情，调用RequestRebuildQuote()请求频次有限制吗？
+答：有限制，单个连接每秒最多100次回补请求，超出该频率会报错。
+2.1.91. 问：调用RequestRebuildQuote()请求指定合约的逐笔回补时，是否可以直接填begin=0，end=一个远大于每日数据量的值，来实现全部回补呢？
+答：begin不可以填0，req.begin 第一次从1开始，req.end一定要比req.begin大，而且req.end可以填一个远超过1000的整数值，但是单次最多返回数据条数size为1000条。
+2.2. 行情Quote-Spi  ​
+2.2.1. 问：盘中订阅快照成功了，但是一直没有回调推送行情，是什么原因呢？
+答：行情程序如果没有调用RegisterSpi()，或者重写的函数名跟头文件中的函数声明不完全一致，比如：函数名拼写错误、参数不匹配，就收不到该回调函数的响应消息。
+2.2.2. 问：为什么我调用某些API接口函数时，没有期望的Spi接口函数被回调？
+答：请检查头文件和库文件版本是否一致，如果不一致，请将所有的头文件和库文件一起更新，然后重新编译再运行，最好将本地其他版本的库文件都清理掉。
+2.2.3. 问：QuoteApi断线后会自动重连么？
+答：Api不会自动帮用户重连，TCP连接断开后，如果需要重新建立连接，可以在收到断线通知OnDisconnect()后选择不销毁Api，不登出Logout()，直接登录Login()。
+2.2.4. 问：收到OnDisconnected()断线通知，在该回调函数里重新登录行情服务器成功后，需要重新订阅么？
+答：实盘环境下，OnDisconnected()回调函数被触发时，只是表明TCP连接的断连，不会影响UDP组播接收行情数据，因此可根据实际情况来决定是否需要建立TCP的重连。如果在断连后没有查询行情静态数据的需求，此时可以不用建立TCP重连。但是测试环境是TCP连接，断线后重新登录行情服务器，需要重新订阅行情。
+2.2.5. 问：OnError()什么时候调用？
+答：只有在服务器发生错误的时候才会触发OnError()。一般情况下，都不会触发。
+2.2.6. 问：XTP-Pro中8:42登录成功后订阅沪市快照行情，OnSubMarketData()返回error_id:11200404 订阅其他错误，请问是什么原因？
+答：订阅快照失败了，因为8:42上交所还没有推快照行情，现在的机制是内存有快照才可以订阅成功，请改为8:50再订阅。如果8:50之后订阅还是报错11200404，可能是订阅的合约退市了，如果合约没有退市，可能是合约的市场填错了。
+2.2.7. 问：订阅的快照行情，是哪个接口推送行情数据呢？
+答：订阅快照成功后，通过OnDepthMarketData()推送交易所下发的行情数据。
+2.2.8. 问：OnDepthMarketData()返回的十档申买申卖，9:15-9:25之间没有数据？
+答：在集合竞价阶段，十档申买申卖字段仅买一卖一有值，即：bid[0]，ask[0]，bid_qty[0]，sk_qty[0]有值。
+2.2.9. 问：OnDepthMarketData()返回的买一卖一队列，什么时候有值？
+答：交易日9:25分Level2行情开始有买一卖一队列数据，也就是十档行情里的买一卖一。
+2.2.10. 问：买一卖一队列bid1_qty[] 和 ask1_qty[]数组的大小不是固定的？数组最大size为多少
+答：数组的大小不是固定的，最大size是50，请先判断数组长度再使用，根据bid1_count 来判断 bid1_qty[] 数组长度，根据ask1_count 来判断 ask1_qty[] 数组长度。
+2.2.11. 问：买一卖一队列的有效委托笔数，和总委托笔数有什么区别呢？
+答：总委托笔数是市场里的委托笔数，而有效委托笔数是系统揭示的委托笔数，XTP中买一卖一队列最多提供50笔数据，如果max_bid1_count >= 50，则bid1_count = 50，如果max_bid1_count < 50，则max_bid1_count = bid1_count。
+2.2.12. 问：债券的快照行情中，加权平均委买价ma_bid_price 和 加权平均委卖价 ma_ask_price 都是0，但是股票不为0，债券品种本身是否默认返回都是0呢？
+答：债券是用ma_bond_bid_price、ma_bond_ask_price。先判断 data_type_v2 是否为 XTP_MARKETDATA_V2_BOND，如果是沪市的债券，Level2行情中ma_bond_bid_price 和 ma_bond_ask_price 有值，如果是深市的债券，Level2行情中也一直是0值。
+2.2.13. 问：集合竞价的时候，OnDepthMarketData()返回快照数据里last_price是有数据的么？
+答：集合竞价时last_price为0，因为没有成交，就不会有成交价。
+2.2.14. 问：OnDepthMarketData()返回的last_price和upper_limit_price都是double类型，为什么一只股票的涨停价是5.2699999， 但是买一价是5.270000？
+答：这是因为浮点数导致，股票价格有效位是小数点后两位，请按四舍五入原则处理，保留小数点后两位即可。
+2.2.15. 问：OnDepthMarketData()返回的 XTPMarketDataStruct.upper_limit_price 和 lower_limit_price，为什么上海的涨跌停价格是0呢？
+答：沪市的快照行情没有推送涨跌停数据，是提供的静态文件数据，用户可通过 OnQueryAllTickersFullInfo() 或 OnQueryAllTickers() 获取涨跌停价格。
+2.2.16. 问：行情数据中的证券，如何判断是否有涨跌停限制？
+答：可通过 OnOnQueryAllTickersFullInfo() 返回的 XTPQFI.is_have_price_limit 值判断涨跌停标志，false为无涨跌幅，true为有涨跌幅限制。不建议直接通过快照数据中的 upper_limit_price 和 lower_limit_price值来判断涨跌停。
+2.2.17. 问：对于新上市的股票，前五天没有涨跌幅限制，交易所对于涨跌停价格是如何赋值的？
+答：新股上市头五天，上交所文件给的是固定值，涨停价是 999999999.9999，跌停价是0.0100000000000000000，我们在XTP中设置的涨停价 9999.99 和 跌停价 0.01，深交所的涨跌停价我们没做处理，主板和创业板，都是交易所赋值的，涨停价是：999999999.9999，跌停价是：0.01。
+2.2.18. 问：行情数据里面的时间是哪里的时间呢？
+答：行情数据里的data_time时间都是交易所时间。
+2.2.19. 问：快照行情中，可转债和国债的成交数量XTPMarketDataStruct.qty单位是什么
+答：在行情中，可转债和国债的数量qty，上交所单位是手，深交所单位是张。我们没有特殊处理，是交易所给的。
+2.2.20. 问：快照中的XTPMarketDataStruct.qty 和 turnover，是当天的总成交数量和总成交金额吗？还是两次快照之间的？
+答：是当天的总成交数量，总成交金额。
+2.2.21. 问：XTP中深圳成指的快照，XTPMarketDataStruct.qty和turnover字段的数据，为什么跟同花顺中的数据不一致呢？
+答：XTP中的行情是透传的交易所行情数据，399001就是深圳成指，成交量和成交金额发的只是深圳成份股指数的值，而不是整个深圳市场指数的值。同花顺看盘软件应该是将399001的成交额换成了395001，并不是交易所发的399001。
+2.2.22. 问：快照行情中XTPMarketDataStruct.trades_count字段，我这边试了下好像都是0？
+答：trades_count是成交笔数，沪市的Level1快照中无意义是0值，SHL2/SZL1/SZL2才有值。
+2.2.23. 问：OnDepthMarketData()返回的XTPMarketDataStruct中，instrument_status 和ticker_status字段的区别？
+答：上交所新债券Level2行情快照中，XTPMD.ticker_status 不再有意义，请使用 XTPMD.bond.instrument_status 替代判断当前债券所处的交易状态。其他快照行情还是使用ticker_status判断交易状态。
+2.2.24. 问：9:15- 9:30期间，快照行情数据中ticker_status[0]是'C'才对啊，为什么会是'B'呢？
+答：9:15-9:25为开盘集合竞价时间，ticker_status[0]是'C'，9:25-9:30之间是'B'。
+2.2.25. 问：停牌的股票，快照行情数据中ticker_status为什么是T0？
+答：P肯定是停牌的，但T也可能不能交易，是否可以交易要看第1位，因为停牌的股票，交易所可能发P，也可能发T。
+2.2.26. 问：股票熔断时，深度行情数据里有标志吗？
+答：沪市没有，深市在快照行情中是有标志的，请参见：OnDepthMarketData()返回的 XTPMarketDataStruct 里的ticker_status，V=波段性中断。
+2.2.27. 问：可以通过哪些途径知道某只股票是停盘等状态的？
+答：在行情marketdata数据中ticker_status字段，表示当前交易状态及标志。
+对于普通股票/基金，具体值如下：
+沪市如下：
+第 0 位：
+'S'，启动（开市前）时段
+'C'，开盘集合竞价时段
+'T'，连续竞价时段
+'E'，闭市时段
+'P'，产品停牌
+'M'，表示可恢复交易的熔断时段（盘中集合竞价）
+'N'，表示不可恢复交易的熔断时段（暂停交易至闭市）
+'U'，表示收盘集合竞价时段
+第 1 位：
+'0'，此产品不可正常交易
+'1'，此产品可以正常交易
+无意义填空格
+第 2 位：
+'0'，未上市
+'1'，已上市
+第 3 位:
+'0'，此产品在当前时段，不接受进行新订单申报
+'1'，此产品在当前时段，可接受进行新订单申报
+无意义填空格
+深市如下：
+第 0 位：
+'S'，启动（开市前）时段
+'O'，开盘集合竞价时段
+'T'，连续竞价时段
+'B'，休市
+'C'，表示收盘集合竞价时段
+'E'，闭市
+'H'，临时停牌
+'A'，盘后交易
+'V'，波动性中断
+第 1 位：
+'0'，正常状态
+'1'，全天停牌
+深交所只有第0、1位，没有第2、3位
+上海市场  0-9:15  9:15-9:25  9:25-9:30  9:30-11:30  11:30-13:00  13:00-14:57  14:57-15:00  15:00-
+非停牌  S 10  C111  T111  T111  T111  T111  U111  E111
+停牌  P011  P011  P011  P011  P011  P011  P011  P011
+注意：从2018-12月份开始，上交所停止发送开盘集合竞价消息（UA3107）。开盘/收盘集合竞价消息，直接从UA3202发出。
+深圳市场  0-9:15  9:15-9:25  9:25-9:30  9:30-11:30  11:30-13:00  13:00-14:57  14:57-15:00  15:00-
+非停牌  S0  C0  B0  T0  B0  T0  C0  E0
+停牌  S1  C1  B1  T1  B1  T1  C1  E1
+对于债券，标志含义同股票/基金字段说明，具体如下：
+上交所
+从2021.10.25后，上交所启用新的债券交易系统，修改了债券行情的协议。
+上交所L1时，ticker_status有值；
+上交所L2时，ticker_status无意义；参见bond.instrument_status；
+深交所
+深交所L1和L2，ticker_status有值；
+对于期权，具体值如下：
+上交所标志含义
+第 0 位：
+'S'，启动（开市前）阶段
+'C'，集合竞价
+'T'，连续交易
+'B'，休市
+'E'，闭市
+'V'，波动性中断
+'P'，临时停牌
+'U'，收盘集合竞价
+'M'，可恢复交易的熔断（盘中集合竞价）
+'N'，不可恢复交易的熔断（暂停交易至闭市）
+第 1 位：
+'0'，未连续停牌
+'1'，连续停牌
+预留则填空格
+第 2 位：
+'0'，不限制开仓
+'1'，限制备兑开仓
+'2'，卖出开仓
+'3'，限制卖出开仓、备兑开仓
+'4'，限制买入开仓
+'5'，限制买入开仓、备兑开仓
+'6'，限制买入开仓、卖出开仓
+'7'，限制买入开仓、卖出开仓、备兑开仓
+第 3 位：
+'0'，此产品在当前时段不接受进行新订单申报
+'1'，此产品在当前时段可接受进行新订单申报
+深交所标志含义，同股票/基金字段说明。
+2.2.28. 问：交易时段，深市股票ticker_status的状态一直是T0, 行情的交易状态是不是有问题？
+答：深交所T0是正常的，上交所T0是不正常的。XTP版本中将交易所传过来的交易状态及标志位转换过，XTP-Pro版本直接透传交易所传过来的值，不再做转换。
+2.2.29. 问：快照返回的XTPMarketDataStockExData.total_bid_qty、total_ask_qty，是交易日当天所有的委托买入、卖出数量的总和吗？
+答：是的，只Level2快照行情，total_bid_qty 和 total_ask_qty 才有值。
+2.2.30. 问：快照行情中的ETF基金实时参考净值，XTPMarketDataStockExData.iopv只是沪市有推送数据吗？
+答：目前深交所和上交所通过Level-1/Level-2发布ETF的iopv数据，是通过OnDepthMarketData()、OnETFIOPVData()回调返回iopv值。
+但是，后续上交所ETF的iopv改造后，取消Level-1/Level-2通过OnDepthMarketData()推送iopv值，启用Level1的OnETFIOPVData()回调推送iopv值。
+2.2.31. 问：XTP中有提供ETF基金T-1日的净值数据吗？
+答：快照返回的基金T-1日净值，XTPMarketDataStockExData.pre_iopv 仅深市有值，上交所没有提供值。
+2.2.32. 问：OnDepthMarketData()股票快照行情数据，更新频率是怎样的？
+答：在连续竞价期间，沪深股票，行情有变化时 3 秒一次，无变化时 60 秒一次；
+在集合竞价期间，沪市股票，行情有变化时 3秒一次，无变化时 60秒一次更新；深市股票，60秒一次更新。
+具体请参见：行情服务接入前指引。
+2.2.33. 问：北交所股票的快照行情，跟沪深股票快照行情的推送频率一样吗
+答：不一样，北交所股票不是主动推送的，是XTP行情服务器每间隔120ms去读取一次dbf格式的行情文件，再将当前读取的文件数据对比前一次的文件数据，如果行情数据有变化，则马上推送，如果数据没变化，则60秒推送一次。
+2.2.34. 问：OnDepthMarketData()推送上海行情，每条都收了两遍，是哪里配置有问题么？
+答：如果同时开启L1和L2的快照，并且在同一个QuoteApi里接收时，深市会过滤只推送更快的1路快照数据，但是沪市不做过滤会推送2路快照数据。
+如果您需要接收完整的L1和L2快照数据，就要配置2份quote_config.ini，创建2个QuoteAPI实例，分别读取配置、login()登录成功后订阅，分别在2个OnDepthMarketData()里接收快照数据。
+2.2.35. 问：XTP快照行情XTPMarketDataStruct.pre_close_price字段，是除权前的收盘价格吗？
+答：不是，XTP中的行情价格都是除权除息后的价格，pre_close_price是交易所推送过来的实际昨收价。比如：昨收价是10元，但是一股分红1元，那么今天看到的prev_close_price就是9元。
+2.2.36. 问：OnETFIOPVData()什么时候会有回调？
+答：订阅ETF快照行情后，当ETF参考单位基金净值数据有变化时，OnETFIOPVData()会实时回调。
+2.2.37. 问：Level2行情订阅快照行情后，为什么收不到沪市ETF的OnETFIOPVData()回调？
+答：目前上交所和深交所Level1、Level2行情都能收到OnETFIOPVData()回调，quote_config.ini配置中，Level1设置 sz_level1_md_index = ON，Level2设置 sz_level2_md_index = ON。
+后续上交所ETF的iopv改造后，仅Level1行情能收到ETF的iopv值，quote_config.ini中需设置 sh_level1_md_index = ON，OnETFIOPVData()回调会收到iopv数据。
+2.2.38. 问：实盘上订阅了订单薄行情，为什么OnOrderBook()没有回调推送数据呢？
+答：请先确认是否已经开通了Level2权限，如果开通了请确认是否使用的UDP连接，再确认quote_config.ini中的配置。
+(1) 在调用订阅接口前，先要在quote_config.ini中开启订阅OB，[ob.normal]下设置 enable = ON，[subscribe_quote_type]下设置 sh_ob = ON、sz_ob = ON。
+(2) 再配置接收OB的local_ip，南方机房通过 20.99 网段的网卡ip接收SZOB，但需通过 30.99网段的网卡ip接收SHOB，金桥机房需通过30.101 网段的网卡ip接收SHOB、SZOB。
+2.2.39. 问：实盘下订阅了沪深股票逐笔行情，收到OnSubscribeAllTickByTick()没有报错，为什么OnTickByTick()没有推送数据？
+答：请先确认是否已经开通了Level2权限，如果开通了请确认是否使用的UDP连接。再确认quote_config.ini中的配置。
+(1) 在调用订阅接口前，先要在quote_config.ini中开启订阅逐笔，[tbt.normal]下设置 enable = ON，[subscribe_quote_type]下设置 sh_level2_md_stock = ON、sz_level2_md_stock = ON。
+(2) 再设置接收逐笔的local_ip，南方机房通过 20.99 网段的网卡ip接收逐笔，金桥机房需通过 20.101 网段的网卡ip接收逐笔。
+2.2.40. 问：OnTickByTick()推送的逐笔行情，9:15为什么收不到沪市的逐笔数据呢？
+答：深市是9:15就开始推送逐笔委托数据，9:25再开始推送逐笔成交数据，但是沪市要9:25才开始推送逐笔委托和逐笔成交数据。
+2.2.41. 问：OnTickByTick()中，逐笔成交如何对应到逐笔委托？
+答：深市中XTPTickByTickTrade.bid_no/ask_no 与 XTPTickByTickEntrust.seq对应，沪市中XTPTickByTickTrade.bid_no/ask_no 与 XTPTickByTickEntrust.order_no对应。
+2.2.42. 问：在逐笔行情中，如何判断这一笔成交是报单成交还是撤单成交呢？
+答：深市在逐笔成交里看成交标识XTPTickByTickTrade.trade_flag('4':撤; 'F':成交），沪市则先通过逐笔成交关联到逐笔委托，然后在逐笔委托里看XTPTickByTickEntrust.ord_type('A': 增加; 'D': 删除)，'D'说明是一笔撤单，那么该逐笔成交说明是撤单成交。
+2.2.43. 问：沪市逐笔行情中，逐笔状态XTPTickByTickStatus.flag字段有哪些状态值？
+答：对于股票产品，交易状态如下：
+08:45~9:15， 发 START 标志；
+09:15~9:25， 开盘集合竞价阶段，发 OCALL 标志；
+09:25~14:57，连续竞价阶段，发 TRADE 标志；
+14:57~15:00，收盘集合竞价阶段， 发 CCALL 标志；
+15:00 后， 首先发 CLOSE标志， 随后发 ENDTR 标志；
+具体请参见交易所行情接口说明。
+2.2.44. 问：OnTickByTick()返回的逐笔成交数据中交易所时间错乱，如果收到数据直接保存指针，然后对指针所指向的内存数据进行处理会有影响吗？
+答：Api提供的逐笔行情数据，仅在OnTickByTick()回调函数中有效，如果您仅仅保存指针，而不是指针所指向的内存数据，就会因为内存在Api内部循环使用，导致您后面使用指针的时候，内存数据就不正确了。
+2.2.45. 问：OnTickByTick()推送的逐笔数据中channel_no是什么意思？
+答：交易所为不同的证券分配了不同的频道代码，一个channel_no里面可能会有多只股票，一只股票的逐笔委托和逐笔成交数据中channel_no 都相同。在同一个channel_no内seq唯一。
+2.2.46. 问：逐笔数据中，深证市场的逐笔成交中trade_flag为'4'是撤单，但是撤的是买单还是卖单要怎么看呢？
+答：XTPTickByTickTrade.bid_no/ask_no，仅其中一个字段有值，另一个字段值为0，如果撤单的买方订单号bid_no不为0，说明撤的就是买单，否则撤的就是卖单。
+2.2.47. 问：上交所逐笔合并后，还是使用 TBT.seq 判定委托+成交的先后顺序吗？
+答：是的，但是委托+成交合在一起编号了（TBT.seq = XTPTickByTickEntrust.seq = XTPTickByTickTrade.seq = BizIndex），均可用于判定逐笔委托+成交的先后顺序。
+2.2.48. 问：上交所逐笔合并后，XTPMD结构体中的ticker_status 和 bond.instrument_status 是不是趋同了？
+答：交易所没说这部分有变动，股票、基金还是继续使用XTPMD.ticker_status字段。
+2.2.49. 问：如何判断深交所逐笔成交的单子是主动买，还是主动卖呢？
+答：主动买，代表卖方委托早于买方委托；主动卖，代表买方委托早于卖方委托。
+逻辑上，一般是和上一笔成交对比，如果比上一笔价格高，说明这笔委托推动了价格上涨，就是主动买。
+沪深两市都可通过 XTPTickByTickTrade.bid_no和ask_no的大小来判断方向，no小的表示先报单。 bid_no > ask_no，则是一笔主动买单；ask_no > bid_no，则是一笔主动卖单。
+2.2.50. 问：可转债在逐笔行情中的数量单位，XTPTickByTickStruct中的qty，沪深不一致？
+答：在行情中，可转债的委托数量和成交数量qty，上交所是"手"为单位，深交所是"张"为单位。
+2.2.51. 问：UDP组播行情推送会有乱序的可能吗？
+答：UDP组播不保证顺序，可能会乱序，但是Api在推送行情时，在一定程度上是对消息保序的。
+2.2.52. 问：实盘上使用Onload开启2个程序同时接收Level2行情，一个程序能正常收到逐笔行情，另一个同样的程序收不到逐笔行情，这是什么原因呢？
+答：如果是用的solarflare网卡，通过Onload启动的行情程序，并且一台机器上开启了多个程序接收Level2行情，那么每个程序都要开onload，或者每个都不开。如果只是部分开启onload，会导致没开onload的程序收不到行情。
+2.2.53. 问：接收Level2全市场的[tbt.normal]逐笔行情数据时，CPU占用率一直保持在200%左右，即使盘后没有收到任何行情数据也是这样，请问正常吗？
+答：这是正常的，CPU占用率在TCP连接时比较低，UDP连接方式会很高，因为除了一个接收线程接收行情外，还有一个解析线程一直在解析行情，如果关闭异步日志，可以减少一个核的占用。
+2.2.54. 问：XTP-Pro行情中，如何通过日志来判断逐笔丢包？
+答：先看xtpxquote.log日志文件，是否有discrete关键字的日志，如有：seq is discrete 5 : 93563 - 93632，说明逐笔数据有丢包。 如果没有discrete关键字，再查看asynlog.YYYYMMDD异步日志，看GroupBase::recv_thread_lnx行中，同一组[data_type]+[stream_id]下seq是否按顺序连续编号。若seq最大值和最小值的差值跟seq行数一致，那就说明没有丢包。
+2.2.55. 问：asynlog异步日志中的seq是原始数据包吗？还是一笔解析过的行情数据呢？
+答：xtpxquote.log和asynlog中的seq包，都是API端收到的没有解析的原始数据包，一个seq包里有1笔或多笔消息，解析后会有1笔或多笔行情数据。
+2.2.56. 问：OnQueryAllTickers()返回的ETF合约静态信息中，ticker_type值为什么是6而不是2？
+答：交易所官网可以查到每只ETF的交易商名单，如果我们公司不在该名单里，就不支持该ETF，ticker_type 就为6。可参考： http://www.sse.com.cn/assortment/fund/etf/list/。
+2.2.57. 问：Level1行情，OnQueryTickersPriceInfo()返回的最新价，为什么是0呢？
+答：目前Level1行情没有盘后定价交易行情，OnQueryTickersPriceInfo()返回的最新价为0是正常的。
+2.2.58. 问：OnQueryAllTickersFullInfo()返回的静态数据里，XTPQuoteFullInfo.security_type 为 XTP_SECURITY_OTHERS 是什么类型的证券？
+答：是XTP不支持的证券类型，在XTP中不支持买入，但如果有持仓，则可以卖出。
+2.2.59. 问：科创板股票买入报单最低值200股，1股起加，有接口通过静态数据获取到委托数量下限吗？
+答：请参见 OnQueryAllTickersFullInfo()接口返回的 XTPQuoteFullInfo.bid_qty_unit、ask_qty_unit，限价买/卖委托数量单位。
+如果按公式计算，最少报单数量就是：bid_qty_unit * bid_qty_lower_limit；
+满足规则的报单数量就是：bid_qty_unit * bid_qty_lower_limit + bid_qty_unit * N。
+2.2.60. 问：在行情数据里，如何区分一个合约代码是股票还是基金还是指数？比如000828，既是股票又是指数，也是开放式基金，数据源里怎么区分？
+答：exchange_id + ticker唯一确定一个证券标的，如果要区分是股票/基金/指数，需要自己针对合约代码特征来识别。可以先使用QueryAllTickersFullInfo()接口查询静态信息，通过security_type来判断，然后在本地建立好映射表。
+2.2.61. 问：QueryAllNQTickersFullInfo()获取的新三板合约，如何区分是北交所合约呢
+答：根据OnQueryAllNQTickersFullInfo()返回的 XTPNQFI.layer_type 过滤北交所的证券代码，如果 layer_type = 2（XTP_SECURITY_LAYER_NORTH_EX），则为北交所合约。但有一个指数899050是北证50指数，交易所给的layer_type是8。
+2.2.62. 问：XTPQuoteNQFullInfo.security_type 可以判断合约的详细类型吗？比如是股票还是指数
+答：不可以，目前该字段没有定义，取值是255 其他类型。
+2.2.63. 问：OnXTPQuoteNQFullInfo()是查询回来的吗？盘中会持续推送吗
+答：是调用QueryAllNQTickersFullInfo()查询后的通知，盘中北交所静态数据信息会持续推送，如果有变化就会直接推送，如果没变化就要等一分钟再推送。
+2.2.64. 问：港股通行情的实时额度、额度状态，也是OnHKCMarketData()回调推送吗？
+答：港股通的实时额度、额度状态有变化时，是OnHKPSData()回调推送，不是OnHKCMarketData()回调推送。
+2.2.65. 问：OnHKCMarketData()推送的是港股行情吗？OnHKRLData()和OnHKCMarketData()回调通知是同一个线程吗？
+答：OnHKCMarketData()推送的是港股通行情，不包括所有的港股行情，只包括内地投资者通过港股通渠道可交易的那部分港股的行情。
+OnHKRLData()和OnHKCMarketData()通知是同一个线程。
+2.2.66. 问：盘中请求回补行情数据，如果OnRequestRebuildQuote()没有返回全部数据，该如何处理？
+答：如果一次性请求数据太多，会导致行情数据无法一次性回补完，那么此时收到的应答消息中rebuild_result.result_code = XTP_REBUILD_RET_PARTLY，用户需要根据回补结果继续发起回补数据请求。
+2.2.67. 问：盘中OnRequestRebuildQuote()返回请求回补结果失败，结果类型码result_code是 XTP_REBUILD_RET_NO_DATA，这是为什么呢？
+答：如果丢包后马上请求回补，但此时查询服务还没有这个数据，就会报错NO_DATA。目前查询服务每隔1秒去扫描查找缺失的数据，建议发现丢包后晚1秒再去查询。
+2.2.68. 问：盘中OnRebuildTickByTick()推送的回补行情，和OnTickByTick()推送的订阅行情，是同时都会收到吗？
+答：请求回补缺失行情的过程中，订阅的实时行情也是正常推送。回补的行情数据从OnRebuildTickByTick()回调推送，与订阅的行情数据OnTickByTick()回调推送，不在同一个线程。
+3．交易FAQ   ​
+3.1. 交易Trader-Api  ​
+3.1.1. 问：同一个进程中支持创建几个TraderApi？
+答：在XTP-Pro中，同一个进程可创建多个TraderApi，但是只有第一次传入CreateTraderApi()的参数有效，多个TraderApi共用一个client_id、共用一个xtptrader.log日志。
+3.1.2. 问：调用用CreateTraderApi()创建API时client_id取值范围是多少？
+答：XTP-Pro API中，交易使用client_id的取值范围是[1，24]的整数值，如果超出了该范围，登录会报错：Login auth server failed with 12100018.
+3.1.3. 问：CreateTraderApi()中的client_id可以相同么？
+答：可以。但是对于同一account，相同的client_id只能保持一个session连接，后面相同的client_id登录在前一个session存续期间，无法连接，会报错：Login xgw failed with 12130005.
+3.1.4. 问：同一个账户account可以同时登录多个TraderApi客户端么？
+答：对于同一账户account的连接，由Api的client_id来进行区分。同一个account，可以同时由不同的client_id登录连接，但是同一对account和client_id，一次只能有一个连接。注意：交易中client_id的总使用个数建议不超过5个。
+3.1.5. 问：CreateTraderApi()中的save_file_path必须输入么？
+答：必须输入，而且必须是一个有可读写权限的实际存在的路径。建议使用绝对路径。
+3.1.6. 问：为什么设置了正确的日志路径，却没有生成trade.log日志文件？
+答：如果日志级别设置得太高，在没有出现该级别的错误时，就不会生成日志文件。调试期间建议设置为 XTP_LOG_LEVEL_DEBUG 或 XTP_LOG_LEVEL_INFO，等调试顺畅了再调高日志级别。
+3.1.7. 问：调用CreateTraderApi()直接返回NULL是什么原因？
+答：使用的client_id值是否超出了取值范围[1-24]？使用client_id的个数是否超过了数量限制？还有一个可能的原因是库文件和头文件的版本不一致。
+3.1.8. 问：TraderApi每次使用其接口前，先要判断下他们是否为空值吗？
+答：一般是Release()销毁了API导致了NULL，如果能确保程序没有调用Release()释放API，就不用每次使用接口前先判断是否为空值。
+3.1.9. 问：如果程序登录交易失败，我先调用Release()退出，重新调用CreateTraderApi()再Login()登录，会有什么问题吗？
+答：程序在存续期间，不支持反复调用Release()和CreateTraderApi()，只需要在程序退出前才能调用Release()。
+3.1.10. 问：XTP-Pro有获取交易日历的接口吗？
+答：获取不到日历，只能获取当天的交易日GetTradingDay()。
+3.1.11. 问：每个账户对应一个TraderSpi吗？我登录两个账号注册了2个TraderSpi，好像没有生效？
+答：一个TraderApi对应一个TraderSpi，如果只调用了一次CreateTraderApi()，也只需调用RegisterSpi()注册一次即可。可以在两个TraderApi中分别登录2个账号，也可以在一个TraderApi中登录2个不同的账号。
+3.1.12. 问：不同进程中的TraderSpi能收到其他进程的订单消息和成交回报吗？
+答：可以收到同一个账号的订单消息和成交回报，但不会收到查询消息。
+3.1.13. 问：调用api接口时返回值异常，如何获取失败原因？
+答：在调用Api接口发生错误后，可调用GetApiLastError()获取错误原因，可以在Login()、InsertOrder()、CancelOrder()返回值为0时调用。在api接口调用没有发生错误时调用，返回的是上一次的错误。
+3.1.14. 问：下单时返回0，然后使用GetApiLastError()又没有错误信息描述，error_id为0，error_msg为空，怎么排查这个问题呢？
+答：请检查下单的参数是否有误，如session id .... 如果最近有升级Api版本，请检查一下使用的头文件和库文件的版本是否一致。可调用GetApiVersion()获取Api版本号，直接替换该版本的.h头文件和.lib库文件，重新编译再运行。
+3.1.15. 问：GetClientIDByXTPID()有何作用？
+答：当多个客户端用同一个account登录时，可以通过此函数得到是哪个client_id的客户端下的单子，并据此过滤出自己的订单。
+3.1.16. 问：GetAccountByXTPID()只能在登录之后调用么？不是向服务器请求查询的吧？
+答：是的，只能在account登录后才能得到正确的结果。而且GetClientIDByXTPID()是在Api本地的查询，调用的开销很小。
+3.1.17. 问：Login()时选择Restart和Quick公共流订阅方式有什么区别？
+答：公共流订阅方式必须在Login()之前设定，在Login()之后生效。Restart方式会将今日所有的公共流消息都重新发送一遍，包括：OnOrderEvent()，OnTradeEvent()，OnFundTransfer()。Quick方式登录后，客户端只会收到登录后的一系列公有流消息。
+3.1.18. 问：在断线后，Login()之前，调用登出Logout()和不调用有何区别？
+答：如果不登出就Login()，公共流订阅方式不会起作用。用户只会收到断线后的所有消息。如果先Logout()再Login()，那么公共流订阅方式会起作用，用户收到的数据会根据选择的RESTART/QUICK而定。
+3.1.19. 问：SetSoftwareVersion()会对Api版本做校验吗？传入的字符串有什么限制？
+答：该设置不是Api发行的版本号，是客户自定义的开发版本号，只能使用 0-9，a-z，A-Z，和._- ，不能使用空格、|分隔符之类的字符。
+3.1.20. 问：SetSoftwareKey()软件开发Key，我们的多个实盘账号能否都同一个Key？
+答：这个key是按渠道来的，多个实盘账号开通了同一个渠道，那么key就是同一个。
+3.1.21. 问：在设定的3秒心跳时间内，如果没有检测到心跳消息，就会触发断线吗？
+答：是的，如果心跳线程在设定的心跳间隔时间内没有收到心跳包，就会关闭连接触发断线。另外，3秒时间太短了，如果心跳线程在3秒内抢占不到资源，就会断线的，改为默认值15秒，或者设置大点60秒也可以。
+3.1.22. 问：登录程序成功后很快就退出了，没有收到OnDisconnected()，而且我没有调用Logout()登出，TraderApi怎么保持连接呢？
+答：是否没有在主线程加个while (true)循环，防止程序退出？
+3.1.23. 问：同一个TraderApi支持多个账号Login()登录么？
+答：支持。用户在登录后会得到一个session_id，用户需要记录下account对应的session_id，所有的接口函数都要用到session_id。
+3.1.24. 问：登录交易服务器返回值为0，调用GetApiLastError()获取错误码显示：
+error_id：10210000，error_msg："Login to trade server failed: the trade authentication server offline or no connection."
+答：这个报错是与服务器网络不通，请先确认服务器是否已开启，telnet ip port是否能通，如果是通的，请检查一下Login()传入的ip、port是否错误。
+3.1.25. 问：登录交易服务器报错提示 Login auth server failed with 12100007. 这个错误代表什么意思？
+答：请检查是否在Login()之前调用了SetSoftwareKey()设置key，如果已设置，请确认key是否正确。此key在申请账号时会一并给出。每个账户对应的key可能不一样。
+3.1.26. 问：Api方式登录交易服务器失败，错误提示：error_msg："Login auth server failed with 12100009."
+答：请检查一下Login()传入账号的用户名、密码是否错误，比如多了空格之类的符号。
+3.1.27. 问：登录交易服务器，错误提示："Login xgw failed with 12130005."，这是什么原因呢？
+答：重复登录了，该账号同时登录的2个交易程序使用了相同的client_id，或者您之前运行的进程没有完全退出？请更换一下client_id再登录。
+3.1.28. 问：Api方式连接交易服务器时报错："Handshack failed with oms, error id is 11000068."
+答：请检查Login()时参数sock_type是否误填了UDP方式？交易只能TCP方式连接。
+3.1.29. 问：登录交易失败，提示"11000045，Login Failed,single user used client id number exceeded."是何原因？
+答：这是因为使用的client_id数量过多导致，请将client_id固定下来使用（取值范围[1~24]），我们对client_id的总共使用个数做了限制，超过上限就不让登录了。
+3.1.30. 问：可以多账户登录吗？多账户是共用一个socket还是每个账户一个socket？
+答：Api支持多个账户连接，多次调用Login()即可，一个账户一个socket连接，不会共享连接。
+3.1.31. 问：每次Login()之后的session_id会变化么？
+答：重启程序相当于重启Api，Api初始化的session_id是一样，但如果断线重连时，也就是不退出程序没有销毁Api，重新Login()时返回的session_id会不同。请每次登录后及时更新session_id。
+3.1.32. 问：登录交易成功，报单时报错10210302，是什么原因呢？
+[XTP:10210302]Session failed: no connection.[OS:106]Transport endpoint is already connect。
+答：请检查一下传入的session_id参数是否正确，session_id的数据类型是uint64_t，报单传入session_id的数据类型也得一致。如果session_id正确，再看下是否断线了。
+3.1.33. 问：报单回报中需要资金账户这个字段，请问如何处理？
+答：登录成功后，可根据session_id和资金账户做一个映射，那么在收到报单回报时，可以通过session_id获取到资金账户。
+3.1.34. 问：程序在运行过程中，调用Logout()断开连接了，为什么没有收到OnDisconnected()？
+答：用户主动调用Logout()时，并不会触发OnDisconnected()回调通知。
+3.1.35. 问：在报单后调用Logout()登出，TraderSpi回调线程也会断开连接吗？
+答：会的，Logout()登出成功，TraderApi会跟服务器断开连接，TraderSpi回调线程也会结束。注意：不允许在回调线程中调用Logout()。
+3.1.36. 问：XTP平台系统支持过夜么？可以每天早上调用Login()，晚上自动Logout()吗？
+答：XTP服务器和API都不支持过夜，只支持当日交易时间段。策略程序必须每日重启，也就是需要用户手动销毁TraderApi，T+1日再重新开启程序，调用CreateTraderApi() 重新创建Api，再Login()。
+3.1.37. 问：GetAccountTradeMarket()返回的trade_location，如何判断是沪市还是深市呢？
+答：trade_location按位来判断，从低位开始数： 第0位表示沪市，即如果(trade_location&0x01) == 0x01，代表可交易沪市，第1位表示深市，即如果(trade_location&0x02) == 0x02，表示可交易深市，如果第0位和第1位均是1，即(trade_location&(0x01|0x02)) == 0x03，就表示可交易沪深2个市场。
+3.1.38. 问：order_xtp_id可以由用户自行设置吗？还是说必须调用GetANewOrderXTPID()生成？
+答：不能由用户自行定义，可调用GetANewOrderXTPID()提前获取order_xtp_id，通过这个函数获取的order_xtp_id仅用于对应的用户报单，如果设置错误，将会导致下单失败。注意：该函数必须在Login()之后调用。
+3.1.39. 问：GetANewOrderXTPID()调用耗时大吗？获取的order_xtp_id必须先小后大顺序使用吗？
+答：不大的，这个是Api端获取的，需按照获取的order_xtp_id顺序来使用，如果不按顺序用，断线重连的时候，可能会丢数据。
+3.1.40. 问：InsertOrderExtra()报单时，必须要传入GetANewOrderXTPID()获取的order_xtp_id吗？
+答：是的，GetANewOrderXTPID() + InsertOrderExtra() 组合报单，也就是先提前获取order_xtp_id，再顺序使用获取的订单号进行报单。
+3.1.41. 问：XTP-Pro中分页查询允许的最大查询数量，如何获取？
+答：可调用GetMaxReqNumOfPagedQuery()获取，返回值就是分页查询的最大值req_count。注意：该函数必须在Login()之后调用。
+3.1.42. 问：分页查询报单时，报错：10210301，Query orders by page failed: invalid parameters, req_count must in [1,200]，什么原因
+答：可调用GetMaxReqNumOfPagedQuery()获取分页查询允许的最大查询数量。
+3.1.43. 问：调用InsertOrder()后，返回的order_xtp_id是唯一的么？
+答：在同一交易日内，保证唯一。所有数据均当日有效，不保证不同交易日唯一。
+3.1.44. 问：InsertOrder()报单沪市股票时报错：[11000010] Failed to get ticker quotes,ticker does not exist or can not be traded!
+答：请检查一下证券代码是否正确，如果无误请检查一下交易市场market是否正确。行情Api和交易Api使用的是不同的市场类型，如果都没问题请确认一下是不是XTP不支持的品种。
+//////////////////////////////////////////////////////////////////////////
+///@brief XTP_MARKET_TYPE市场类型，交易里使用
+//////////////////////////////////////////////////////////////////////////
+typedef uint32_t XTP_MARKET_TYPE;
+///初始化值或者未知
+constexpr uint32_t XTP_MKT_INIT = 0;
+///深圳A股
+constexpr uint32_t XTP_MKT_SZ_A = 1;
+///上海A股
+constexpr uint32_t XTP_MKT_SH_A = 2;
+///北京A股
+constexpr uint32_t XTP_MKT_BJ_A = 3;
+///港股
+constexpr uint32_t XTP_MKT_HK = 4;
+///港股通上海
+constexpr uint32_t XTP_MKT_SH_HK = 5;
+///港股通深圳
+constexpr uint32_t XTP_MKT_SZ_HK = 6;
+///未知交易市场类型
+constexpr uint32_t XTP_MKT_UNKNOWN = 7;
+3.1.45. 问：InsertOrder()下单被拒，错误提示：11000311，User is not allowed to trade in this market!
+答：通常为一账号两中心未在对应节点交易对应市场的证券，比如：登录的深圳节点，就只能报单深市的股票，如果报单沪市的股票就会拒单。请检查一下连接的交易服务器地址、报单的股票。
+3.1.46. 问：InsertOrder()下单结构体XTPOrderInsertInfo中的order_client_id有什么作用？
+答：order_client_id为用户自定义字段，用户下单时输入什么值，订单响应OnOrderEvent()返回时就会带回什么值，类似于备注，方便用户自己定位订单。当然，如果你什么都不填，也是可以的。合理的规划好order_client_id，将有助于用户更快定位订单。
+3.1.47. 问：为何有的时候下单后被拒，成为废单？
+答：请先根据拒单原因检查一下订单，可以按如下项进行检查：
+买入普通股票时，请检查报单数量，单笔申报数量是否为100的整数倍，卖出时，可卖持仓数量不足100股的部分，应该一次性委托卖出。
+普通股票单笔报单最大数量是否超过了100 万股。债券交易和逆回购单笔报单是否超过了10万 手。
+买入科创板股票时，请检查报单数量，单笔申报数量是否小于200股。限价买卖科创板股票，是否超过了10万股；市价买卖科创板股票，是否超过了5万股。卖出时，可卖持仓数量不足200股的部分，应当一次性委托卖出。
+卖出报单的数量，不能超过可卖持仓 sellable_qty。
+限价单的话，价格是否超过涨跌停价格。
+市价单的话，是否没有填保护限价，注意：债券不支持市价单，集合竞价期间不支持市价单。
+price_type 价格类型是否正确，是否是交易所允许的价格类型。
+ticker 股票代码是否正确，是否跟交易所类型匹配。
+market 交易所类型是否正确，XTP_MKT_SZ_A = 1 是 深圳A股， XTP_MKT_SH_A = 2 是 上海A股。
+business_type 是否设置正确，注意：信用账号对应的两融业务填XTP_BUSINESS_TYPE_MARGIN。
+position_effect 是否设置正确，该字段仅期权交易中有效，在普通现货和两融交易中都填 0。
+是否下单数量过多，触发了风控。
+是否撤单过多，触发了风控。
+是否在允许报单时间内。 如果以上都不是，请看一下是否是模拟撮合环境，如果是模拟撮合环境，会有一定几率发生模拟交易所拒单。此时交易所拒单的error_code是11110000，或者11100000，error_msg通常为217或者10000或者29999。这是模拟拒单，方便您测试拒单情况，不代表您的报单有错误。
+3.1.48. 问：科创板股票报单最低值200股，XTP中能通过静态数据获取到吗？
+答：可调用QueryAllTickersFullInfo()接口获取，参见 XTPQuoteFullInfo结构体中的bid_qty_unit、ask_qty_unit，限价买/卖委托数量单位。
+3.1.49. 问：689009可卖持仓185股，报单委托卖出100股，错误提示：11010111，新订单的数量参数无效，是怎么回事？
+答：普通CDR遵循普通股票的交易规则，100股以下为零散股。科创板CDR交易规则遵循科创板的报单规则，200股以下为零散股，零散股要一次性委托卖出。
+3.1.50. 问：使用InsertOrder()下单时，报单数量XTPOrderInsertInfo.quantity允许非100的整倍数么？
+答：（1）如果是买单，普通股票报单数量必须是100的整数倍，但如果是科创板，报单数量最低200股，1股起加即可。
+（2）如果是卖单，要看可卖持仓 XTPQueryStkPositionRsp.sellable_qty，当可卖持仓的剩余数量有零散股时，是允许的，此时要将零散股一次性报出。普通股票，不足100股为零散股，科创板股票，不足200股为零散股。
+例如：A股票有可卖持仓232股报单卖出：
+（1）如果是普通股票，卖出后剩余数量是非零散股就行。可卖持仓232股，则可以卖出32股，也可以卖出132股，或者一笔报单卖出232股。
+（2）如果是科创板股票，只有当剩余数量小于200股时，才能一次性委托卖出零散股。当可卖持仓232股时，不能委托卖出32股或132股，但是可以200、32两笔报单卖出，或者201、31两笔报单，或者202、30两笔报单。。。等等。当可卖持仓132股时，只能一笔报单卖出132股。
+3.1.51. 问：国债逆回购XTPOrderInsertInfo.quantity填100的整数倍时，返回错误提示：11010126，证券数量超出范围，什么原因呢？
+答：上交所和深交所的国债逆回购品种，100元⾯额为1张，申报数量应当为1000元⾯额或其整数倍，单笔最⼤申报数量不得超过100亿元⾯额，单笔申报数量下限是10张。在交易中，国债和可转债报单的单位都是张，1手 = 10张。
+3.1.52. 问：InsertOrder()传入的XTPOrderInsertInfo.price价格小数点有要求吗，比如股票的价格由于精度问题存储的是3.19999999，这时候报单过去会有问题么？
+答：实盘环境下，请根据交易所的价格精度来报单，如果精度不一致，会导致交易所拒单。价格精度可以参考这个字段 XTPQuoteFullInfo.price_tick，普通股票是0.01，沪市债券为0.01元，深市债券为0.001元，ETF是0.001，期权是0.0001。
+3.1.53. 问：如何理解价格类型里面的注释？
+答：只有标注了期权的才可用于期权下单，没有标注期权的只能普通股票适用。如果标注了沪深，则沪深两市股票都可用。如果仅标注了沪，则沪市股票可用，深市股票不可用。
+/////////////////////////////////////////////////////////////////////////
+///@brief XTP_PRICE_TYPE是价格类型
+/////////////////////////////////////////////////////////////////////////
+typedef uint32_t XTP_PRICE_TYPE;
+///限价单-沪 / 深 / 沪期权 / 深期权 （除普通股票业务外，其余未特指的业务均使用此种类型）
+constexpr uint32_t XTP_PRICE_LIMIT = 1;
+///即时成交剩余转撤销，市价单-深 / 沪期权 / 深期权
+constexpr uint32_t XTP_PRICE_BEST_OR_CANCEL = 2;
+///最优五档即时成交剩余转限价，市价单-沪
+constexpr uint32_t XTP_PRICE_BEST5_OR_LIMIT = 3;
+///最优5档即时成交剩余转撤销，市价单-沪深 / 深期权
+constexpr uint32_t XTP_PRICE_BEST5_OR_CANCEL = 4;
+///全部成交或撤销,市价单-深 / 沪期权 / 深期权
+constexpr uint32_t XTP_PRICE_ALL_OR_CANCEL = 5;
+///本方最优，市价单-深 / 深期权 / 沪科创板
+constexpr uint32_t XTP_PRICE_FORWARD_BEST = 6;
+///对方最优剩余转限价，市价单-深 / 沪期权 / 深期权 / 沪科创板
+constexpr uint32_t XTP_PRICE_REVERSE_BEST_LIMIT = 7;
+///期权限价申报FOK
+constexpr uint32_t XTP_PRICE_LIMIT_OR_CANCEL = 8;
+///未知或者无效价格类型
+constexpr uint32_t XTP_PRICE_TYPE_UNKNOWN = 9;
+3.1.54. 问：price_type比如注释是 市价单-深 / 沪期权 / 深期权，这是什么意思？
+答：该价格类型是市价单，支持深市股票、沪市期权、深市期权可用，注意：沪市股票不可以用该类型。
+3.1.55. 问：在集合竞价期间，price_type可以填市价单吗？
+答：不可以，集合竞价期间不支持报市价单，只能报限价单。
+3.1.56. 问：报单可转债，当price_type填市价单时，报错：新订单的价格类型参数无效，是什么原因呢？
+答：可转债不支持市价单，price_type 只能填 XTP_PRICE_LIMIT。
+3.1.57. 问：沪深ETF，债券和股票，都可以报单fak和fok价格类型吗？
+答：部分证券类型支持fak和fok，具体请参考price_type对应枚举值的注释。
+3.1.58. 问：上海市价单选择最优5档即时成交剩余转撤销，报错：11000551，Fund account has no market order right! 这是什么原因？
+答：该账号是否没有开通市价单权限呢，个人户可在手机APP中泰齐富通自助开通，产品户需临柜开通，T+1日在XTP柜台生效。
+3.1.59. 问：报市价单时，XTPOrderInsertInfo.price 是否可以不用填价格？
+答：市价单的委托价没有意义，但是全面注册制后，有保护限价的要求，请根据以下说明来填价格：
+沪市的市价单，主板股票、科创版股票、ETF基金，委托价不能填0，需要填一个价格作为保护限价。
+深市的市价单，没有保护限价限制，主板股票、创业板、ETF基金，委托价可以填0。
+注意：保护限价，即买入申报的成交价格和转为限价申报的申报价格 不高于买入保护限价，卖出申报的成交价格和转为限价申报的申报价格 不低于卖出保护限价。
+3.1.60. 问：xtp中进行逆回购时，side = XTP_SIDE_SELL，那正回购填哪个值呢？
+答：XTP中不支持正回购，逆回购报单side 填 XTP_SIDE_SELL，price_type 填 XTP_PRICE_LIMIT，position_effect 填 XTP_POSITION_EFFECT_INIT。
+3.1.61. 问：报单股票业务，XTPOrderInsertInfo.position_effect 填非0值有影响吗？
+答：position_effect 仅在期权业务中有效。现货和两融账号在报单时，如果填了非0值也不会报错，但是在smartX查询委托和成交列表时可能为空。
+3.1.62. 问：报单国债逆回购时，报错：11000308，业务类型与证券类型不匹配，这个错误是什么原因？
+答：一般来说，是业务类型填错了，XTPOrderInsertInfo.business_type您检查一下是否传错了。
+3.1.63. 问：两融账户报单逆回购，为何报错：11000310, error_msg = User type not match with business type.
+答：两融账户不支持该业务，只有普通现货账户可以报单逆回购。
+3.1.64. 问：XTP_BUSINESS_TYPE_OPTION 业务类型，可以交易个股期权吗？
+答：不支持个股期权，目前只能交易上证50ETF期权、沪深300ETF期权、深证100ETF期权、深交所创业板ETF（代码159915）、深交所中证500ETF（代码159922）、上交所中证500ETF（代码510500）、深证100ETF期权（159901）。
+3.1.65. 问：我报单国债逆回购时报错：11000309，Business type does not match with side. 是什么填错了？
+答：业务类型与方向不匹配，国债逆回购 business_type 填 XTP_BUSINESS_TYPE_REPO，您检查一下 XTPOrderInsertInfo.side 是否不为 XTP_SIDE_SELL ？
+3.1.66. 问：两融账户支持可转债申购吗？
+答：XTP-Pro目前还不支持可转债申购业务，可以在XTP调用InsertOrder()报单，business_type 也是 XTP_BUSINESS_TYPE_IPOS。
+3.1.67. 问：报单时报错：11000313，Failed to get security account! 我没有填XTPOrderInsertInfo.account_id指定股卡，是什么原因呢？
+答：InsertOrder()的入参XTPOrderInsertInfo结构体，是否没有先做初始化？传入结构体参数，最好都先使用memset将变量初始化为0，以免char类型的字段出现乱码。
+3.1.68. 问：报单的席位 XTPOrderInsertInfo.branch_pbu，什么情况下需要填写？
+答：通常为券结业务客户使用。非券结业务，如果不填，就以默认席位报送；如果填了，就使用指定的席位报送。
+3.1.69. 问：XTP支持配债吗？API方式如何报单呢？
+答：XTP-Pro目前还不支持配债。配债跟配股一样报单，可以在XTP调用InsertOrder()接口报单，business_type 填 XTP_BUSINESS_TYPE_ALLOTMENT，side 填 XTP_SIDE_BUY，price_type 填 XTP_PRICE_LIMIT，开平方向填0。
+3.1.70. 问：XTP信用业务支持债转股吗？如何报单债转股？
+答：XTP-Pro目前还不支持债转股，可以在XTP调用InsertOrder()接口报单，business_type 填 XTP_BUSINESS_TYPE_BOND_SWAP_STOCK，side 填 XTP_SIDE_SELL， price_type 填 XTP_PRICE_LIMIT，价格可以填0，开平方向填0。
+3.1.71. 问：普通户的股票需要转到信用户，是怎么操作呢？
+答：XTP-Pro目前还不支持两融业务。可以在XTP登录信用账户，调用InsertOrder()做担保品转入，business_type 填 XTP_BUSINESS_TYPE_MARGIN，side 填 XTP_SIDE_GRTSTK_TRANSIN。 从普通户划转到信用户，当天买入的持仓，可以担保品转入。 从信用户划转到普通户，当日买入的持仓，可以担保品转出，转出时优先扣减昨仓，再扣减今仓，并且维持担保比例超过300%以上的部分才可以转出。
+3.1.72. 问：InsertOrder()和InsertOrderExtra()的返回值是不是都是order_xtp_id？哪种接口报单速度更快一点？
+答：InsertOrder()的返回值是order_xtp_id，但是InsertOrderExtra()要先调用GetANewOrderXTPID()提前获取一批需要的order_xtp_id，返回非0表示报单发送成功，此时等同于传入的order_xtp_id。相比直接调用InsertOrder()报单，GetANewOrderXTPID() + InsertOrderExtra() 速度稍微快一点。
+3.1.73. 问：我们遇到在InsertOrder()返回之前就收到了OnOrderEvent()消息，导致没法将内部order_id和order_xtp_id关联起来，请问如何处理？
+答：如果InsertOrder()晚于OnOrderEvent()返回导致没法关联内部订单，可以使用 GetANewOrderXTPID() + InsertOrderExtra()组合来报单，即先调用GetANewOrderXTPID()提前获取一批实际需要 的order_xtp_id，再调用InsertOrderExtra()进行报单，注意：如果order_xtp_id设置得不对，会导致报单失败，如果不按顺序使用order_xtp_id，在断线重连的时候可能会丢数据。
+3.1.74. 问：实盘下调用InsertOrder()，报单频率是否有限制？
+答：有的，后台对报单频率有控制，如果触发oms风控会被断线。具体可参考：XTP金融风控指标文档。
+3.1.75. 问：为什么我没有做过撤单操作，没有调用CancelOrder()接口，可是最后订单被撤了？
+答：发生这种情况时，先确认报单的价格类型，是否使用了即时成交剩余转撤销 或 全部成交或撤销？如果没有使用该类价格类型，再确认一下是否在其他客户端比如smartX上手动撤单了？
+3.1.76. 问：调用CancelOrder()撤单，为何没有撤单成功响应函数？
+答：对于撤单成功，OnOrderEvent()会响应，返回原订单的状态变成部撤或者全撤，所以没有提供单独的撤单成功响应。只有撤单失败时，OnCancelOrderError()会响应并返回撤单失败的原因。
+3.1.77. 问：为何撤单失败提示错误，找不到原单？
+答：请检查撤单时CancelOrder()传入的order_xtp_id是否正确，是否uint64_t位的，请确保传入的order_xtp_id与下单时返回的order_xtp_id是一致的。
+3.1.78. 问：撤单失败，OnCancelOrderError()返回：error_id: 11000305，error_msg: Failed to find original order! 是什么原因导致的呢？
+答：这个错误是查找原始报单失败，是否撤单时order_xtp_id填错了？是否对拒单发起了撤单？ 如果报单是已拒绝状态，不用再对拒单发起撤单请求。
+3.1.79. 问：调用CancelOrder()撤单，一般在什么情况下会撤单失败？
+答：一般来说，以下情况会撤单失败： (1) 撤单时传入的订单号order_xtp_id错误； (2) 订单已经成交，或者已经撤单； (3) 对废单发起撤单请求； (4) 新股申购、现券还券，不允许撤单； (5) 当前时段不允许撤单； (6) 原单发往了交易所，但是交易所还没有确认时（初始状态），此时撤单也会失败；
+3.1.80. 问：进行ETF申赎时，在休市期间调用CancelOrder()撤单报错，为什么呢？
+答：XTP系统不支持在休市期间对ETF申赎撤单。
+3.1.81. 问：担保品划转可以撤销吗？
+答：可以撤销，在信用账户调用CancelOrder()发撤单请求。只是XTP-Pro目前还不支持信用业务。
+3.1.82. 问：有只查特定一笔委托的接口么？
+答：可调用QueryOrderByXTPID()查询特定的一笔委托，传入的订单号order_xtp_id，是InsertOrder()发送成功时返回的order_xtp_id，注意：要传入uint64_t数据类型的订单号。
+3.1.83. 问：XTP-Pro中，查询报单和报单是不是共用一个线程？
+答：是共用一个回调线程，报单后，如果有大量的查询消息没有处理完，会堵塞后续的订单响应消息。为了确保报单被及时响应，建议报单时降低查询频率，不要一次性查询所有订单、持仓，特别是不要查询ETF清单、ETF股票篮这类响应条数特别多的静态数据。
+3.1.84. 问：QueryOrders()可以查询历史订单吗，比如前天的？
+答：该方法支持分时段查询，但是只限于查询当天的订单。如果要查询实盘的历史订单，可以登录smartX客户端查询。
+3.1.85. 问："可撤委托"对应的是QueryUnfinishedOrders()查询返回的单子吧？
+答：是的，可撤委托对应未完结的报单，QueryUnfinishedOrders()返回的未完结的报单包括未成交，部分成交的报单，但是不包括拒绝的报单和撤单。
+3.1.86. 问：QueryOrdersByPage()分页查询报单时，报错：10210301，是什么原因？
+[ERROR][ERROR:10210301]Query orders by page failed: invalid parameters, req_count must in [1,200].
+答：一次查询的订单条数超限了，XTPQueryOrderByPageReq.req_count 请改为200以内的值，最大查询数量可调用GetMaxReqNumOfPagedQuery()获取。
+3.1.87. 问：调用QueryOrdersByPage()分页查询订单，为啥一直返回空呢？
+答：传入的XTPQueryOrderByPageReq.reference参数是否不对，第一次查询时填0，后面的查询要填上一次收到的查询结果reference索引。
+3.1.88. 问：QueryOrdersByPage()中传入的reference，同一个账户的这个值都是增量的吗？
+答：reference不一定是增量，可能是个地址值，指向缓存里的一个地址。
+3.1.89. 问：调用QueryTradesByXTPID()查询，OnQueryTrade()会返回多条记录吗？
+答：会的，如果一笔单子是多次成交的，每一次成交返回一条查询结果响应。
+3.1.90. 问：可以同时在XTP系统和普通柜台交易吗？在XTP系统调用QueryTrades()只能返回当天的成交记录吗
+答：不能，开通XTP实盘后，只能使用smartX客户端或程序SDK交易，不能在普通柜台委托交易。XTP中QueryTrades()只能查询当天的成交记录，如果要查询历史成交记录，需登录普通柜台查询。
+3.1.91. 问：QueryTrades()可以查询所有历史成交记录吗？怎么返回find none record？
+答：Api只能查询到当天的订单记录，XTP服务器每天都重启，仅保持一天的数据。实盘用户可以登录smartX客户端、融易汇或齐富通查询历史记录。
+3.1.92. 问：盘中在XTP系统调用QueryPosition()返回的持仓，为何跟融易汇里看到的持仓不一致？
+答：融易汇里的持仓不是实时更新的，XTP里的持仓需要在T日清算后才同步到融易汇中。
+3.1.93. 问：实盘环境，可调用QueryPosition()和QueryAsset()查询持仓和资金是什么时间段？
+答：在交易日服务器开启的8:45-17:00期间都可以查询。实盘服务器一般在8:45左右开启，最晚不会超过9:15，在17点关闭。
+3.1.94. 问：开通一账户双中心后，QueryPosition() 、QueryAllPosition()查询的持仓，还是返回沪深2个市场的持仓吗？
+答：XTP-Pro中，是只返回当前节点对应市场的持仓，不会返回另一个市场的持仓了。
+3.1.95. 问：信用账户调用QueryPosition()查询持仓，好像会返回融资和普通买入的持仓？
+答：是的，持仓不区分是融资买入的还是担保品买入的，查询持仓会返回融资买入和担保品买入的总持仓。
+3.1.96. 问：在查询资金接口中，QueryAsset()查询的资产包括持仓的证券市值吗？
+答：不包括，持仓的证券资产为0，由于交易服务器没有连接行情服务器，也就获取不到持仓证券的最新价。用户可自行订阅行情并用最新价来计算市值。
+3.1.97. 问：QueryAsset()查询资金，上海和深圳的资金是分开的还是合在一起的？
+答：如果没有开通一账户两中心，沪深的资金是合在一起的；如果开通了一账户两中心，沪深的资金是分开的。假如在上海节点查询资金，只会返回上海的资金，不会返回深圳的资金，同理深圳也一样。
+3.1.98. 问：资金划拨操作是调用哪个Api接口？
+答：使用FundTransfer()接口请求资金划拨，资金流转方向参见 transfer_type 字段，一账户两中心节点之间的资金划拨，需注意资金划拨的方向，另外，XTP和主柜台之间的资金划拨要使用交易密码，而不是银证转账的资金密码。
+3.1.99. 问：资金划拨请求发送成功，FundTransfer()函数的返回值，跟回调返回的XTPFundTransferNotice.serial_id是同一个值吗？
+答：是同一个值，不需要等收到资金划拨通知再更新流水号。serial_id数据类型是uint64_t，注意数据类型要保持一致。
+3.1.100. 问：调用FundTransfer()做资金划转操作，只是在跨节点划拨时要填site字段吧？
+答：是的，划转节点类型site字段，双中心用户跨节点划拨时必填，填转入或转出的目标服务器对应的节点类型，枚举值如下：
+/////////////////////////////////////////////////////////////////////////
+///@brief XTP_TRANSFER_SITE_TYPE是一个划转节点类型
+/////////////////////////////////////////////////////////////////////////
+typedef uint32_t XTP_TRANSFER_SITE_TYPE;
+///主柜台
+constexpr uint32_t XTP_TRANSFER_SITE_COUNTER = 0;
+///上海节点
+constexpr uint32_t XTP_TRANSFER_SITE_SH = 2;
+///深圳节点
+constexpr uint32_t XTP_TRANSFER_SITE_SZ = 4;
+///北京节点
+constexpr uint32_t XTP_TRANSFER_SITE_NQ = 8;
+///香港节点
+constexpr uint32_t XTP_TRANSFER_SITE_HK = 16;
+///未知节点
+constexpr uint32_t XTP_TRANSFER_SITE_UNKNOWN = 256;
+3.1.101. 问：一账号两中心节点之间如何进行资金划转？
+答：如果是做转入操作，且知道对方节点的可用资金是多少，那么可以直接发起划拨请求。如果不知道对方节点可用资金是多少，那么可以先通过QueryOtherServerFund()查询到对方节点的资金，然后设置合适的资金，再发起划拨请求。
+3.1.102. 问：QueryFundTransferByID()接口可以一次性查询当天所有的资金划拨订单吗？
+答：不可以，一次只能查询指定ID单号的资金划拨订单。
+3.1.103. 问：QueryFundTransferByID()能查询到银证转账订单吗？
+答：不能查询银证转账订单，只能查询XTP柜台和主柜台之间、以及XTP柜台双中心账号的两个节点之间的划拨。
+3.1.104. 问：要查询所有的资金划拨订单，是调用QueryFundTransferByPage()接口获取吗？
+答：是的，如果是第一次查询，reference填0即可，后续的查询，reference要传入上一次收到的查询结果中带回来的索引。
+3.1.105. 问：XTP柜台有Api接口查询金证主柜台的资金吗？
+答：可调用 QueryOtherServerFund()接口查询，查询类型 query_type 包括：金证主柜台的可转资金（不是可取资金），双中心账号的对方节点的可用资金、对方节点的融券卖出余额资金、对方节点的授信额度。
+3.1.106. 问：开通两中心的账号，在当前交易节点如何查询另一个节点的实时资金及授信额度？
+答：可参见 QueryOtherServerFund()的查询类型query_type。如果查询另一个节点的实时资金，query_type 填 XTP_FUND_QUERY_INTERNAL，如果查询另一个节点的授信额度，query_type 填 XTP_FUND_QUERY_INTERNAL_CONTRACT。柜台资金查询类型的枚举值如下：
+/////////////////////////////////////////////////////////////////////////
+///@brief XTP_FUND_QUERY_TYPE是柜台资金查询类型
+/////////////////////////////////////////////////////////////////////////
+typedef uint32_t XTP_FUND_QUERY_TYPE;
+///查询金证主柜台可转资金
+constexpr uint32_t XTP_FUND_QUERY_JZ = 0;
+///查询一账号两中心设置时，对方节点的资金
+constexpr uint32_t XTP_FUND_QUERY_INTERNAL = 1;
+///查询一账号两中心设置时，对方节点的融券卖余额资金
+constexpr uint32_t XTP_FUND_QUERY_INTERNAL_REPAY = 2;
+///查询一账号两中心设置时，对方节点的授信额度
+constexpr uint32_t XTP_FUND_QUERY_INTERNAL_CONTRACT = 3;
+///未知类型
+constexpr uint32_t XTP_FUND_QUERY_UNKNOWN = 4;
+3.1.107. 问：现货账户申赎沪市交易型货币基金ETF，为何报错 11000306, error_msg = Service not supported？
+答：现货账户可申赎的ETF不包括交易型货币基金，您可以先调用QueryETF()来查询当前支持的可申赎的ETF清单，再根据返回的ETF代码来报单ETF申赎。
+3.1.108. 问：调用QueryETF()查询所有市场的ETF合约信息，设置query_param参数为NULL，为什么报参数错误呢？
+答：query_param参数需要使用memset初始化为0，如果结构体变量不做初始化，windows下可能是默认为0，但是linux下可能是随机值。
+3.1.109. 问：XTP支持场外ETF申赎吗？
+答：不支持，XTP支持的可申赎ETF列表请参见： https://xtp.zts.com.cn/doc/api/business  。
+3.1.110. 问：信用账户报单ETF申赎时，为何报错 11000308, error_msg = Business type not match with security type？
+答：信用账户不支持ETF申赎，但是可以买卖沪市交易型货币基金。名单公告请参见： https://www.zts.com.cn/hqzx/infoDetail.aspx?doc_id=d6%2FPCP7A4ZB7h4xoDJ%2Fnjg%3D%3D。
+3.1.111. 问：ETF的成分股数据从哪里查询到？XTP中是否有对应的查询接口
+答：可调用QueryETFTickerBasket()查询ETF股票篮的成份股列表。
+3.1.112. 问：QueryETFTickerBasket()查询ETF股票篮，请求参数query_param可以为NULL吗？
+答：不可以为NULL，该接口是查询ETF合约的成分股信息，ETF合约代码（ETF买卖代码）不可以为空，market字段也必须指定。
+3.1.113. 问：XTP中报单新股申购，如何得到申购代码ticker呢？
+答：可调用QueryIPOInfoList()获取申购代码。
+3.1.114. 问：报单新股申购时，报错：11000373，Failed to get new stock apply info in specified market!
+答：报单的账号没有科创板权限，申购科创板股票也需要开通科创板权限。个人户可以在中泰齐富通开通，产品户只能临柜开通，T+1日在XTP柜台生效。
+3.1.115. 问：新股申购，如何获取申购数量呢？
+答：今日可申购新股信息，可调用QueryIPOInfoList()查询最大允许申购数量，调用QueryIPOQuotaInfo()查询可申购额度，那么所能申购的最大数量为：min（新股可申购额度，最大允许申购数量）。
+3.1.116. 问：今天查询新股申购额度QueryIPOQuotaInfo()，在信用账户和普通账户上都有申购额度，请问两个申购委托是独立的吗？
+答：不是独立的，两个账户是共享额度的。同一个一码通下的股东账户，如果重复申购了，交易所是按首笔申购报单计算的，后续的申购在报单时不会报错，但是清算时会报错。
+3.1.117. 问：查询可转债申购是哪个接口？申购单位是手还是张？
+答：QueryBondIPOInfoList()接口查询今日可转债申购列表，申购最小单位为10张（1000元），申购数量应当为10张或10张的整数倍。注意：在OnQueryBondIPOInfoList()回调中，证券类型 参见 ticker_type 字段，债券是 XTP_TICKER_TYPE_BOND。
+3.1.118. 问：可转债转股后的股票证券代码、转股价格，是调用哪个接口查询？
+答：可调用QueryBondSwapStockInfo()查询可转债转股的基本信息，但是深交所没有转股价格，XTPQueryBondSwapStockRsp.swap_price赋值是0。
+3.2. 交易Trader-Spi  ​
+3.2.1. 问：在TraderSpi回调函数中，为何不快速返回有可能导致断线？
+答：在服务器向客户端发送的数据量很大的情况下，当用户在TraderSpi回调函数中处理过慢，会导致数据接收缓冲区被填满，服务器无法向客户端发送数据，此时会触发断线。所以在实际使用中，请尽快从响应函数中返回。
+3.2.2. 问：OnDisconnected()什么时候会调用？
+答：在服务器与客户端断线的时候会被回调。如果此时用户想要重连，则不要调用Release()，不要调用logout()，只需要在该函数中再次调用Login()，并在登录成功后更新session_id即可。在用户主动调用Logout()时不会触发OnDisconnected()。
+3.2.3. 问：TraderApi断线后会自动重连么？
+答：对于普通交易来说，TraderApi不会自动帮用户重连。用户可以在收到断线通知OnDisconnect()后选择不销毁Api，不登出logout()，继续登录Login()，此时交易服务器会在用户重新登录后，从断点消息处续传。
+3.2.4. 问：交易程序在断线后，如何系统恢复？
+答：收到断线通知后，在不重启的情况下，在OnDisconnected()函数中不要调用Release()，也不调用logout()，直接调用Login()，默认就是resume方式，只会收到断线后的消息；如果是重启程序的情况下，只能通过restart方式，或者quick方式+查询（QueryOrders/QueryTrades）来获取今日所有的公共流消息数据。
+3.2.5. 问：OnServerStatusNotification()什么时候会被回调？会频繁回调吗
+答：login()登录成功后会有一条回调，在收到OnServerStatusNotification()通知服务可用时，才能发起资金划拨或查询服务，否则会因为服务不可用而报错。
+之后，只是在交易网关或者api跟服务器断连的时候，会收到服务不可用的通知，当服务恢复重连上后，会收到服务可用通知。
+一般来说，不会频繁回调的，除非您的交易程序有很多异常的断线。
+3.2.6. 问：OnError()什么时候会被回调？
+答：只有在服务器发生错误的时候才会触发OnError()。一般情况下，都不会触发。当error_info为空，或者error_info.error_id为0时，表明没有错误。
+3.2.7. 问：OnConnect()什么时候会被回调？
+答：用户收到此回调，仅表明已经认证成功，此时还不能向服务器发送报单和查询等操作，需要等login返回才能进行后续下单操作，此处可提前记录并更新用户名与session_id的对应关系。
+3.2.8. 问：Login()登录成功后，也收到了OnConnect()回调，是以Login()返回的session_id结果为准，还是两个结果的交集？
+答：收到OnConnect()回调就可以提前记录用户名与session_id的对应关系，这个session_id跟Login()返回的结果是一样的。
+3.2.9. 问：收到OnDisconnected()回调时，重新以quick方式登录，不会收到OnResumeEnd()回调，是吗？
+答：是的，这个回调是RESTAR 或 RESUME 方式在消息重传时，当推送消息重传结束时才会调用。收到此通知就表明断线时的推送消息已经接受完毕，后面收到的推送消息将是实时推送消息。
+3.2.10. 问：报单到交易所的单子，也可能收到OnUnknownOrder()回调通知吗？
+答：不会，此响应仅表明在XTP服务器丢失的订单，该订单并没有报送到交易所。
+3.2.11. 问：新增的OnOrderAck()接口， OnOrderEvent()接口的使用方式不受影响吧？
+答：不受影响，OnOrderAck()只是报单的初始状态的回调通知，此响应仅表明XTP服务器收到了报单且没被OMS拒单，不代表已经报送到交易所。
+3.2.12. 问：订单响应OnOrderEvent()在哪几种状态下会推送？
+答：对于一个订单而言，OnOrderEvent()只会推送订单的开始状态（未成交），或者终止状态（全部成交、部分撤单、已撤单、已拒绝），部分成交的时候不会推送，部成状态需要用户根据成交回报OnTradeEvent()来确定。
+3.2.13. 问：全成的订单响应OnOrderEvent()会在此订单的所有成交回报OnTradeEvent()之后到达么？
+答：我们的系统确保订单的开始状态OnOrderEvent在此订单的所有成交回报到达之前到达，同时也确保订单的结束状态OnOrderEvent在此订单的所有成交回报之后到达。
+3.2.14. 问：会发生InsertOrder()接口还没返回，但是先收到OnOrderEvent()返回的订单确认状态的情况么？
+答：可能会发生这种情况，而且调用InsertOrder()接口的线程被挂起时，也会晚于订单确认消息返回。用户需注意收到不存在的订单时，先缓存起来不要丢弃。
+3.2.15. 问：在下单的时候，在接收回调函数报单通知时，会不会保证按照正常的订单生命周期对应的时间顺序；举个例子，全成会在部成后面出现，而不会是部成在全成后面出现。
+答：一般都是按时间顺序推送，同时Api对消息也会保序，保序时间大概在3~5秒内，比如：一笔订单部成后发起撤单，撤单响应和成交回报消息在3秒内先后到达，Api就会保序为先收到OnTradeEvent()，再收到OnOrderEvent()。另外，部成不推送报单通知消息。
+3.2.16. 问：撤单时，OnOrderEvent()返回的cancel_time指的是哪个时间，交易所撤单时间？还是XTP接收到交易所返回撤单信息的时间？
+答：XTPOrderInfo.cancel_time是交易所撤单时间。
+3.2.17. 问：如何获取撤单的数量？
+答：撤单成功后，原单会收到OnOrderEvent()消息，报单状态为部分撤单或已撤单，此消息中的XTPOrderInfo.qty_left就代表撤单数量。
+3.2.18. 问：在交易日开盘前8:50报单，调用InsertOrder()发送后返回非“0”值，但是开盘前一直收不到OnOrderEvent()响应，这是什么原因呢？
+答：在交易日盘前的报单，只是缓存在XTP服务器，要等到9：15开盘时收到报单信号才能发往交易所，之后才会收到OnOrderEvent()报单响应消息。
+3.2.19. 问：XTP-Pro的TraderSpi里面的回调，是多线程执行还是单线程的？
+答：TraderSpi中查询的回调是同一个线程。
+3.2.20. 问：TraderSpi中，查询响应、OnOrderEvent()和OnTradeEvent()，使用的是同一个线程吗？
+答：是同一个回调线程，XTP-Pro中没有单独的超时线程了。
+3.2.21. 问：市价单的撤单，上交所的订单执行状态exec_type是'0'值吗？
+答：是的，exec_type 字段只对深圳市场有意义，深市已撤销的订单，OnOrderEvent()返回的两条应答数据，一次是'0'，一次是'4'。
+3.2.22. 问：报单后会返回一个初始的未成交状态吗？然后对该订单进行撤单，OnOrderEvent()会返回几种报单状态？
+答：报单状态order_status，初始化状态是报单到柜台，未成交状态是收到了交易所确认。如果撤单时订单未成交，撤单成功会返回一个已撤单状态，如果撤单时订单部分成交，则会返回一个部分撤单状态。
+3.2.23. 问：申赎ETF时如何判断成分股全都收到了，中间有没有丢失？
+答：OnOrderEvent()返回的order_status为全部成交状态时，就表明ETF成分股都收到了。
+3.2.24. 问：在OnOrderEvent()报单通知中，XTPOrderInfo.update_time没有赋值，这个是正常的吗？
+答：当订单状态还没有修改时，update_time没有值是正常的。update_time指XTP服务器收到交易所订单已确认的本地时间，在收到交易所对报单已确认（未成交）、撤单消息时，update_time都会赋值的，而且赋值后，这个时间不会因为成交状态的变化而改变。
+3.2.25. 问：实盘下报单，OnOrderEvent()返回 order_status=XTP_ORDER_STATUS_REJECTED 是什么原因？
+答：可根据错误码查看错误提示，如果是XTP柜台拒单，请至XTP官网查看XTP错误代码速查表，如果是交易所拒单，请到交易所官网下载相应的错误代码文件：
+XTP-Pro 错误码： https://xtp.zts.com.cn/doc/api/xtpDoc  错误代码速查表。
+上交所： http://www.sse.com.cn/services/tradingservice/tradingtech/technical/other/  ，或者直接搜索：IS111_上海证券交易所报盘软件错误代码表 。
+深交所： http://www.szse.cn/marketServices/technicalservice/interface/  ，或者直接搜索：深圳证券交易所Binary交易数据接口规范。
+3.2.26. 问：现在报单响应OnOrderEvent()还是不会返回交易所的报单编号order_exch_id？
+答：XTP-Pro中会返回，请参见OnOrderEvent()返回的 XTPOrderInfoEx.order_exch_id。另外，成交通知OnTradeEvent()也会返回 XTPTradeReport.order_exch_id。
+3.2.27. 问：OnOrderEvent()回调里XTPOrderInfo的trade_amount，是不是可以一次性得到这笔订单的总成交金额？
+答：是的，等订单完结了，该回调返回的trade_amount为此订单的成交总金额，不包含手续费。
+3.2.28. 问：在订单部分成交时，如何获取该笔订单的剩余未成交数量？
+答：订单部分成交时不会推送OnOrderEvent()，只会推送OnTradeEvent()，可通过查询该笔报单QueryOrdersEx()，或者查询未完结报单QueryUnfinishedOrdersEx()来获取 剩余数量 XTPOrderInfoEx.qty_left，成交数量 XTPOrderInfoEx.qty_traded，以及此订单的报单数量 XTPOrderInfoEx.quantity。
+3.2.29. 问：订单响应结构体XTPOrderInfo中的qty_left数量，为什么在撤单成功时不显示为0？
+答：qty_left在订单为未成交、部成、全成、废单状态时，表示此订单还没有成交的数量，在部撤、全撤状态时，表示此订单被撤的数量。
+3.2.30. 问：撤单成功，OnOrderEvent()返回的 order_xtp_id 和 order_cancel_xtp_id 分别是什么订单号呢？单号都是唯一的吗
+答：order_xtp_id是原单号，order_cancel_xtp_id是对原单撤单生成的撤单号，在同一个交易日内，原单号和撤单号都是唯一的，不同的交易日不保证唯一性。
+3.2.31. 问：为何成交回报OnTradeEvent()中的成交数量，有的时候不是100的整数倍？
+答：成交回报的数量取决于卖单的数量，如果卖单不是100的整数倍，那么成交数量是有可能不是100的整数倍的。交易所只允许将零散股一次性卖出，此时可以下非100的整数倍。
+3.2.32. 问：XTPTradeReport成交回报有唯一标识么？
+答：对于单个账户来说，上交所可以使用成交序号 report_index 来唯一区分，深交所可以使用成交编号 exec_id 来唯一区分。对于多账号来说，martket + exec_id + side 组合起来区分，唯一标识一笔成交。
+3.2.33. 问：如何检查自成交？
+答：对于上交所，exec_id可以唯一标识一笔成交。当发现2笔成交回报拥有相同的exec_id，则可以认为此笔交易自成交了。对于深交所，exec_id是唯一的，暂时无此判断机制。
+3.2.34. 问：成交通知中XTPTradeReport.report_index是交易所返回的吗？
+答：报单编号order_exch_id、成交编号exec_id 都是交易所返回的，成交序号report_index是XTP柜台生成的。
+3.2.35. 问：OnTradeEvent()什么情况下不回调呢？今天测试的时候有笔订单完全成交后，没有收到成交通知回调消息
+答：是否线程挂起了？检查一下回调函数是否有堵塞。
+3.2.36. 问：撤单废单了，可以关联到原始订单吗？
+答：XTP-Pro中的撤单废单，可以关联到原始订单，OnCancelOrderError()会返回撤单号order_xtp_id、原始订单号orig_order_xtp_id。
+3.2.37. 问：XTP结构体中有很多时间，哪些时间是交易所时间，哪些是XTP本地时间？
+答：交易中，撤销时间cancel_time、成交时间trade_time是交易所时间。委托时间insert_time、更新时间update_time是XTP本地时间。
+3.2.38. 问：报单后撤单，会有先收到撤单成功，再收到成交通知的情况吗？
+答：XTP撤单的时候，如果是部分成交，一般是先收到部分成交的通知，再收到撤单成功的通知，但如果成交回报消息超时，就有可能先收到撤单成功，再收到部分成交的通知。
+3.2.39. 问：报单都成交了，而且是两次部分成交。撤单也没有任何回调信息，最致命的是出现错误：Segmentation fault。
+答：是否没有重写OnCancelOrderError()，或者重写了但是跟头文件中的函数声明不完全一致，最终导致了crash。
+3.2.40. 问：OnQueryOrder()返回有order_client_id为0值的单子，这是什么情况？
+答：如果是一笔报单，返回的order_client_id是用户自定义的值，如果是一笔撤单，返回的order_client_id是0值。
+3.2.41. 问：查询全部订单时，OnQueryOrder()是按照order_xtp_id顺序依次返回各条订单的吗？
+答：不是按顺序依次返回的，多个不同的client_id客户端报单，订单号并不是连续递增的。
+3.2.42. 问：OnQueryOrderByPage()接口返回的记录中包含报单和撤单委托，怎么能方便的把报单和撤单委托区分出来？
+答：根据order_submit_status字段来区分，枚举值前三个是报单，后面三个是撤单。
+/////////////////////////////////////////////////////////////////////////
+///@brief XTP_ORDER_SUBMIT_STATUS_TYPE是报单提交状态类型
+/////////////////////////////////////////////////////////////////////////
+typedef uint32_t XTP_ORDER_SUBMIT_STATUS_TYPE;
+///订单已经提交
+constexpr uint32_t XTP_ORDER_SUBMIT_STATUS_INSERT_SUBMITTED = 1;
+///订单已经被接受
+constexpr uint32_t XTP_ORDER_SUBMIT_STATUS_INSERT_ACCEPTED = 2;
+///订单已经被拒绝
+constexpr uint32_t XTP_ORDER_SUBMIT_STATUS_INSERT_REJECTED = 3;
+///撤单已经提交
+constexpr uint32_t XTP_ORDER_SUBMIT_STATUS_CANCEL_SUBMITTED = 4;
+///撤单已经被拒绝
+constexpr uint32_t XTP_ORDER_SUBMIT_STATUS_CANCEL_REJECTED = 5;
+///撤单已经被接受
+constexpr uint32_t XTP_ORDER_SUBMIT_STATUS_CANCEL_ACCEPTED = 6;
+3.2.43. 问：调用查询接口，OnQueryOrderByPage()消息返回时，数据是按批推送过来的么？
+答：所有查询数据都是按个推送的，每次推送一个，即当查询结果有N个数据时，会回调N次接口，当最后一个数据推送时，会设置参数is_last为true。
+3.2.44. 问：OnQueryOrderByPage()返回order_sequence，是什么情况呢？
+答：当order_sequence为0，表明当次查询没有查到任何记录。
+3.2.45. 问：在OnQueryOrderByPage()回调中，当is_last为true时，是最后一条报单记录了吗？
+答：当is_last为true时，如果order_sequence等于req_count，那么表示还有报单。
+3.2.46. 问：在XTP-Pro中一次性查询全部的成交，只有一个接口QueryTrades()吧，回调是OnQueryTrade()？
+答：是的，如果当天报单成交的单子很多，建议使用分页查询接口。
+3.2.47. 问：在查询持仓中，OnQueryPosition()返回的股票名称ticker_name为何是乱码？
+答：xtp系统中股票名称ticker_name是UTF-8编码，请检查一下编码是否正确。另外，windows默认是gbk编码，直接cout输出到控制台看时中文可能是乱码，需要转换一下编码格式。
+3.2.48. 问：查询持仓时，如果账户没有持仓的话，有何返回结果？
+答：当没有持仓的时候，OnQueryPosition()函数中的error_info.error_id =11000350，表明没有持仓。同样的，在查询其他记录时，如果没有记录信息，在返回的SPI函数中均有error_info.error_id =11000350。
+3.2.49. 问：盘中在xtp系统调用QueryPosition()返回的持仓，为何跟融易汇里看到的持仓不一致？
+答：融易汇里的持仓不是实时更新的，xtp里的持仓需要在T日清算后才同步到融易汇中。
+3.2.50. 问：查询持仓返回的yesterday_position字段是不是不会变？怎么计算当前仓位中当有多少是今天开的仓位？
+答：昨日持仓yesterday_position是不变的。如果仅做普通买卖的话，也没有任何未完结的挂单，那么 总持仓 = 可卖持仓 + 今日买入的持仓。日初的时候，总持仓 = 可卖持仓 = 昨日持仓。
+3.2.51. 问：查询回调函数中参数is_last为true时，这最后一个响应有实际的消息数据吗？
+答：有实际的消息数据，可能消息只是error_info有效，判断时请先看error_info的error_id是否为0，如果为0，再判断其他参数。不为0的话，其他的参数可能无效。
+3.2.52. 问：如果发生分红、配股之类的，通过什么方式去查询呢？
+答：如果是普通现货账号，可以通过查询持仓看到分红送股后的总持仓，参见XTPQueryStkPositionRsp中的total_qty。如果是信用账户，可以通过查询负债看到负债合约中增加的权益数量，通过查询持仓可以看到担保品持仓中送股后的总持仓。
+3.2.53. 问：在查询资金的回调响应中，为何总资产=可用资金+预扣资金？
+答：总资产total_asset = 可用资金buying_power + 证券资产security_asset + 预扣资金withholding_amount，由于目前security_asset我们暂时不做统计，默认为0，因此总资产 = 可用资金 + 预扣资金。
+3.2.54. 问：OnQueryAsset()返回的资金中证券资产security_asset为0，OnQueryPosition()返回的持仓也没有市值，后续有计划提供吗？
+答：由于交易服务器没有连接行情服务器，目前不太好提供这个数值。
+3.2.55. 问：现货账号能获取到可取资金吗，buying_power是可取资金吗？
+答：XTP只提供了期权的可取资金。可取资金是可以进行银证转账的资金，现货的可取资金得从金证柜台获取。buying_power准确来说指可用资金，不一定都是可取资金。
+3.2.56. 问：国债逆回购到账后，普通交易会先占用哪部分资金？是可用不可取的逆回购资金，还是可用可取的自有资金呢
+答：默认是先占用可用不可取的这部分资金。
+3.2.57. 问：OnQueryAsset()返回的withholding_amount字段，什么情况不为0？
+答：使用自有资金委托买入的订单是未成交的挂单时，withholding_amount不为0。该字段包含：预扣买入未成交的交易资金 + 预扣手续费，可参见XTPQueryAssetRsp结构体中的说明。另外，ETF申赎也会有预扣资金，因为有现金预估差额。
+3.2.58. 问：OnQueryAsset()返回的withholding_amount预扣资金，会在收盘后释放那些未成交单子的占用资金吗？
+答：盘中买入未成交的单子所占用的资金，要等晚间清算后才会解除冻结，除非客户在收盘前手动撤单挂单，才会返回这部分占用资金。
+3.2.59. 问：OnQueryAsset()返回的XTPQueryAssetRsp.preferred_amount可取资金，会实时变化吗？
+答：期权的可取资金会随着行情最新价而变化，因为实时保证金占用计算会用到行情最新价。
+3.2.60. 问：有API接口来判断申请的账号是普通账号还是信用账号吗？
+答：调用QueryAsset()查询账户资金，返回的XTPQueryAssetRsp结构体包含有账户类型 account_type，枚举值如下：
+///@brief XTP_ACCOUNT_TYPE账户类型
+typedef uint32_t XTP_ACCOUNT_TYPE;
+///普通账户
+constexpr uint32_t XTP_ACCOUNT_NORMAL = 0;
+///信用账户
+constexpr uint32_t XTP_ACCOUNT_CREDIT = 1;
+///衍生品账户
+constexpr uint32_t XTP_ACCOUNT_DERIVE = 2;
+///未知账户类型
+constexpr uint32_t XTP_ACCOUNT_UNKNOWN = 3;
+3.2.61. 问：国债逆回购T+1日后，总资产total_asset字段不包含国债逆回购资金吗？
+答：如果买入1天期的国债逆回购，total_asset在T+1日后会包含逆回购资金，因为收益会在T+1日到账进入可用资金。 如果买入超过1天期的国债逆回购，total_assetT+1日后不会显示逆回购资金，因为XTP系统中只能在买入当日显示国债逆回购的持仓，在T+1日后不会显示，也就没法计算市值。
+3.2.62. 问：OnQueryAsset()返回值里有一个deposit_withdraw，是做什么用的呢？
+答：deposit_withdraw 当天出入金字段，仅限期权账户有效，是指XTP柜台和金证柜台之间的划转资金，当天出入金 = 当日入金 - 当日出金。
+3.2.63. 问：配债了一只沪市的债券、一只深市的债券，查询资金时发现买入成交证券占用资金fund_buy_amount，累计了沪市配债的金额，但没有计算深市配债的金额，这是什么原因呢？
+答：沪市的配股配债有成交回报，fund_buy_amount会累计该笔成交金额，但深市的配股配债没有成交回报，没有成交金额，只会预扣资金。
+3.2.64. 问：我想查询当日累计买卖金额，OnQueryAsset()返回的fund_buy_amount，fund_sell_amount，这两个字段只支持普通户吗？
+答：支持普通现货账号和期权账号，信用账号只能通过查询成交来计算买卖金额。
+3.2.65. 问：xtp可以获取到每笔成交的预扣手续费么？
+答：有参考值，报单后的报单通知有返回预扣手续费，可参考OnOrderEvent()返回的 XTPOrderInfo.order_withhold_fee 字段。
+3.2.66. 问：查询资金划拨订单，OnQueryFundTransfer()会返回划拨失败订单的错误信息吗？
+答：会返回，fund_transfer_err_info就是资金划拨订单在划拨失败时的错误信息。
+3.2.67. 问：资金划拨类型是跨节点转入/转出，那另一个节点也会收到OnFundTransfer()划拨通知吗？？
+答：另一个节点也能收到资金划拨消息OnFundTransfer()，但是订单响应、成交回报这些消息，另外的节点都收不到。
+3.2.68. 问：在什么情况下会收到OnUnknownFundTransfer()回调响应？
+答：如果XTP资金划拨服务器丢失订单，并没有报送到后台，就会收到此回调响应。
+3.2.69. 问：如果账号不是两中心的，我查询其他节点可用资金，OnQueryOtherServerFund()会返回啥？
+答：会返回错误码，具体请参见error_info。
+3.2.70. 问：查询ETF清单，OnQueryETF()返回错误 Error: 11000390 msg: Failed to get etf base information!
+答：这个错误是获取ETF基本信息失败，一般是不支持申赎的ETF，如果是支持的，应该是市场填错了。
+3.2.71. 问：ETF申赎时，T日申购赎回清单中公布的当日现金差额的估计值是哪个字段？
+答：OnQueryETFBasket()返回的XTPQueryETFBaseRsp.estimate_amount为T日预估现金差额。cash_component，目前这个字段没有使用。
+3.2.72. 问：OnQueryIPOInfoList()返回的qty_upper_limit是指账户对这只股票的最大申购数量吗？使用qty_upper_limit这个数量去申请新股报错：
+错误提示：11010413 The quantity of IPO order exceeds the quota。
+答：qty_upper_limit是指这只股票的最大允许申购数量，还需查询可申购额度quantity，参见XTPQueryIPOQuotaRsp，请使用min（可申购额度，最大允许申购数量）进行新股申购。
+3.2.73. 问：OnQueryIPOQuotaInfo()返回的新股申购额度，是每个市场的可申购总额度吗？
+答：该接口分别返回深市和沪市2条记录，可申购额度包含创业板额度，但是不包含科创板额度，科创板额度是分开计算的，请参见 XTPQueryIPOQuotaRsp.quantity 和 tech_quantity。
+3.2.74. 问：查询可转债转股信息，OnQueryBondSwapStockInfo()返回的是所有可转债的列表数据吗？
+答：不是所有可转债的列表，只返回处于转股期的可转债列表。
+3.2.75. 问：可以通过接口查到可转债对应的正股信息吗？
+答：如果是在转股期，OnQueryBondSwapStockInfo()会返回可转债的正股代码。如果不在转股期，交易所也没有提供正股代码。
+3.2.76. 问：实盘查询到的可转债的转股价格，XTPQueryBondSwapStockRsp.swap_price 只有上海的有值，深市的都是0，是正常的吗？
+答：是正常的，深交所只提供了"是否转股期标志"，没有提供转股价格，swap_price是0值。
+4．算法FAQ   ​
+4.1. 算法AlgoX-Api  ​
+4.1.1. 问：同一个进程中支持创建几个AlgoXApi？
+答：在XTP-Pro中，同一个进程只允许创建一个AlgoXApi。
+4.1.2. 问：调用用CreateAlgoXApi()创建API时client_id取值范围是多少？
+答：Xtp Pro API中，算法使用client_id的取值范围是[1，255]的整数值。
+4.1.3. 问：CreateAlgoXApi()中的client_id可以相同么？
+答：可以。但是对于同一account，相同的client_id只能保持一个session连接，后面相同的client_id登录在前一个session存续期间，无法连接。
+4.1.4. 问：同一个账户account可以同时登录多个AlgoXApi客户端么？
+答：对于同一账户account的连接，由Api的client_id来进行区分。同一个account，可以同时由不同的client_id登录连接，但是同一对account和client_id，一次只能有一个连接。
+4.1.5. 问：CreateAlgoXApi()中的save_file_path必须输入么？
+答：必须输入，而且必须是一个有可读写权限的实际存在的路径。建议使用绝对路径。
+4.1.6. 问：为什么设置了正确的日志路径，却没有生成algox.log日志文件？
+答：如果日志级别设置得太高，在没有出现该级别的错误时，就不会生成日志文件。调试期间建议设置为 XTP_ALGO_LOG_LEVEL_DEBUG 或 XTP_ALGO_LOG_LEVEL_INFO，等调试顺畅了再调高日志级别。
+4.1.7. 问：调用CreateAlgoXApi()直接返回NULL是什么原因？
+答：对于算法而言，同一个进程中只允许存在一个AlgoXApi，请检查是否创建了多个AlgoXApi实例？如果同一个进程中只创建了一个实例，还有一个可能是库文件和头文件的版本不一致。
+4.1.8. 问：AlgoXApi每次使用其接口前，先要判断下他们是否为空值吗？
+答：建议每次使用接口前先判断是否为空值。
+4.1.9. 问：不同进程中的AlgoXApi能收到其他进程的消息吗？
+答：可以收到同一个账号的算法订单消息和算法成交回报，但不会收到查询消息。
+4.1.10. 问：SetSoftwareVersion()会对Api版本做校验吗？传入的字符串有什么限制？
+答：该设置不是Api发行的版本号，是客户自定义的开发版本号，只能使用 0-9，a-z，A-Z，和._- ，不能使用空格、|分隔符之类的字符。
+4.1.11. 问：在设定的3秒心跳时间内，如果没有检测到心跳消息，就会触发断线吗？
+答：是的，如果心跳线程在设定的心跳间隔时间内没有收到心跳包，就会关闭连接触发断线。另外，3秒时间太短了，如果心跳线程在3秒内抢占不到资源，就会断线的，改为默认值15秒，或者设置大点60秒也可以。
+4.1.12. 问：登录程序成功后很快就退出了，没有收到OnAlgoDisconnected()，而且我没有调用Logout()登出，AlgoXApi怎么保持连接呢？
+答：是否没有在主线程加个while (true)循环，防止程序退出？
+4.1.13. 问：同一个AlgoXApi支持多个账号LoginAlgo()登录么？
+答：不支持。同一个AlgoXApi只允许一个用户登录，但是允许多个用户建立算法通道。
+4.1.14. 问：登录算法总线成功，报单时报错10260300，是什么原因呢？
+[XTP:10260300]Start strategy failed: invalid parameters。
+答：请检查一下传入的user_name参数是否正确，如果session_id正确，再看下是否已经成功建立算法通道。
+4.1.15. 问：调用api接口时返回值异常，如何获取失败原因？
+答：在调用Api接口发生错误后，可调用GetApiLastError()获取错误原因，可以在LoginAlgo()、InserAlgotOrder()、CancelAlgoOrder()返回值为0时调用。在api接口调用没有发生错误时调用，返回的是上一次的错误。
+4.1.16. 问：是先调用ALGOUserEstablishChannel()，再调用LoginAlgo()吗？
+答：是先调用LoginALGO()成功后，再调用ALGOUserEstablishChannel()建立算法通道。注意：如果多个普通账号同时调用login()登录，那么每个普通账号都需要调用ALGOUserEstablishChannel()建立算法通道。
+4.1.17. 问：调用LoginAlgo()接口登录算法服务器，这个报错是什么原因呢？
+[XTP:10260000]Login to algo server failed. User has logged.[OS:106]Transport endpoint is already
+答：重复登录algo服务器了。一个进程中只能调用一次LoginAlgo()，多个账号同时Login()登录成功后，如果其他账号再调用LoginAlgo()就会重复登录；或者一个账号调用Logout()后再调用Login()登录成功，再调用LoginAlgo()也会重复登录。
+4.1.18. 问：如果只想QueryStrategy()查询策略，也要调用ALGOUserEstablishChannel()吗？
+答：只查询也要调用ALGOUserEstablishChannel()。
+4.1.19. 问：调用ALGOUserEstablishChannel()建立算法通道时，有如下错误提示，这是什么原因呢？
+[XTP:10260302]Session failed: no connection.[OS:106]Transport endpoint is already connected login.
+答：调用Login()登录oms服务器后，没有先调用LoginALGO()登录算法总线，而是直接调用ALGOUserEstablishChannel()建立算法通道的吗？
+4.1.20. 问：登录算法服务器成功了，但是OnALGOUserEstablishChannel()回调报错如下：
+err_id=11800024, msg=User verify failed, please check the password and the authority of AlgoX
+答：是否调用ALGOUserEstablishChannel()时传入的密码错误？此时要填oms的登录密码。
+4.1.21. 问：调用InsertAlgoOrder()后就退出程序了，再调用QueryStrategy()查看状态停留在已创建，是需要调用start来启动母单吗？
+答：停留在已创建是因为这个母单一直没有启动，在调用InsertAlgoOrder()后不能马上退出进程，需要等到OnInsertAlgoOrder()回调响应，如果回调响应没有报错，就说明母单启动了。
+4.1.22. 问：调用InsertAlgoOrder()后，能确保先有OnInsertAlgoOrder()回调，再有OnStrategySymbolStateReport()回调吗？
+答：如果InsertAlgoOrder()发送成功，回调顺序依次是OnNewStrategyCreateReport()、OnStrategySymbolStateReport()、OnInsertAlgoOrder()、OnStrategyStateReport() 。
+4.1.23. 问：报算法单InsertAlgoOrder()发送成功后，该账号所有登录的其他客户端也会收到回调消息吗？会收到哪些回调消息
+答：该账号的所有客户端都会收到这4个回调消息：OnNewStrategyCreateReport()、OnStrategySymbolStateReport()、OnInsertAlgoOrder()、OnStrategyStateReport() 。
+4.1.24. 问：CancelAlgoOrder()接口是撤销算法单的母单还是子单？
+答：是撤销算法母单，如果不想用算法下单时，可调用该接口撤销用户策略。
+4.1.25. 问：CancelAlgoOrder()成功后，母单是已停止状态还是已销毁状态？
+答：CancelAlgoOrder()的参数cancel_flag，如果是true，就是已停止，如果是false，就是已销毁。不管是已停止还是已销毁，都不会再有交易。
+4.1.26. 问：CancelAlgoOrder()，传入的cancel_flag为false会撤子单吗？
+答：cancel_flag为false也会撤子单，但是只会撤一次。
+（1）cancel_flag为false时，是立即停止算法母单的执行，算法平台会对已下的子单做撤单操作，其余的平仓等操作则需要客户自己处理；
+（2）cancel_flag为true时，是交给算法自行处理停止请求，包括撤单、平仓、资源清理等，算法处理完成后才能结束停止，在停止过程中，算法可以继续交易。
+4.2. 算法AlgoX-Spi  ​
+4.2.1. 问：在AlgoXSpi回调函数中，为何不快速返回有可能导致断线？
+答：在服务器向客户端发送的数据量很大的情况下，当用户在AlgoXSpi回调函数中处理过慢，会导致数据接收缓冲区被填满，服务器无法向客户端发送数据，此时会触发断线。所以在实际使用中，请尽快从响应函数中返回。
+4.2.2. 问：OnAlgoDisconnected()什么时候会调用？
+答：在服务器与客户端断线的时候会被回调。用户不用重连，api会帮用户自动重连。
+4.2.3. 问：AlgoXApi断线后会自动重连么？
+答：对于算法交易来说，Api会进行自动重连，收到OnAlgoDisconnected()断线通知时，无需用户操作。在重连成功后，无需重新建立算法通道。
+4.2.4. 问：为什么算法总线断线了，却没有收到OnAlgoDisconnected()回调？
+答：可能是回调线程被堵塞了，因为OnAlgoDisconnected()也是在回调线程里通知的，如果回调线程还没返回，是不会收到断线通知的。
+4.2.5. 问：不知道母单的合约代码，如何获取算法单的母单ticker？
+答：OnQueryStrategy()返回值有母单的报单参数，解析strategy_param字符串，就可以获取ticker。
+4.2.6. 问：我如何知道这个算法单是哪种算法类型，比如是卡方还是皓兴还是非凸？
+答：可以调用QueryStrategy()查询策略，传入母单号xtp_strategy_id，回调函数OnQueryStrategy()返回策略类型 XTPStrategyInfoStruct.m_strategy_type。
+4.2.7. 问：如果需要查询所有的母单及详情，包括策略的委托和执行状态信息，是调用哪个接口呢
+答：可以调用QueryStrategy()接口获取，回调消息是OnQueryStrategy()，而且还会推送OnStrategyStateReport()、OnStrategySymbolStateReport()通知获取策略的执行状态信息。
+4.2.8. 问：调用InsertAlgoOrder()报算法后，算法单的母单号ID对应哪个字段呢？
+答：m_xtp_strategy_id 就是算法单的母单号ID，参见OnInsertAlgoOrder()返回的结构体XTPStrategyInfoStruct。
+4.2.9. 问：m_client_strategy_id 有要求唯一，或者递增之类的限制吗？
+答：没有，m_client_strategy_id 不要求唯一，也不是全局唯一的，是用户报算法单时自定义id，帮助用户定位母单。
+4.2.10. 问：母单收到了OnInsertAlgoOrder()，但是没有收到OnStrategyStateReport()，这是为什么？
+答：因为这个单子的状态没有变化，在策略运行状态有变化时才会通知。
+4.2.11. 问：已停止状态的母单，可能还会一直推送OnStrategyStateReport()消息吗？
+答：可能会，比如：母单执行完停止了，但是时间还没有到用户设定的end_time，这时市场价格还是会不停地刷新。
+4.2.12. 问：当我收到一个非本客户端发出的母单回报时，都要query一下才能拿到剩余信息，还有其他方式获取吗？
+答：OnStrategyStateReport()返回的数量，可计算出剩余信息， 请参考 XTPStrategyStateReportStruct结构体。
+4.2.13. 问：收到OnAlgoDisconnected()，需要重新调用LoginALGO()来登录吗？
+答：不需要，客户端与Algo之间的连接，断线后会自动重连，用户无需做其他操作。请不要堵塞此线程，否则会影响algo的登录。
+4.2.14. 问：OnAlgoConnected()回调函数，第一次登陆不会被调用吗，只有重连的时候才会被调用吗？
+答：是的，algo断线后会自动重连，仅在断线重连成功才会被调用。
+4.2.15. 问：交易日报算法单后，断开重连后会自动推送OnStrategyStateReport()吗？
+答：断线重连后，除非策略运行过程中策略状态有更新才会推送。
+4.2.16. 问：算法策略参数strategy_param中，是否可以存在非策略要求的参数？ 调用QueryStrategy()查询时，返回的strategy_param是原始请求中的值吗?
+答：可以存在非策略要求的参数，但是自定义参数名最好不要和已定义的参数名重名，可以加上前缀来区分。如果使用API来委托下母单，QueryStrategy()查询返回的是API原始请求中的strategy_param，但如果使用SmartX客户端来委托下母单，返回的则是SmartX客户端拼接的参数。
+4.2.17. 问：策略信息中m_strategy_type是个编码，如何对应策略名称？
+答：请参考官网中的算法-SDK文档，算法流控及母单参数示例,链接地址： https://xtp.zts.com.cn/doc/api/xtpDoc  。
+4.2.18. 问：在使用algo算法交易时，算法子单执行后，子单怎么关联到相应的母单？
+答：收到子单回报时，可通过XTPOrderInfoEx结构体中的strategy_id字段的值来做关联，如果非0，则是算法单的母单号。
+4.2.19. 问：OnStrategyStateReport()这个接口是定时通知的吗？有查询algo执行状态的接口么？
+答：不是定时通知的，是母单运行状态有变化时才会推送。也可以调用QueryStrategy()接口查询策略状态，参见m_strategy_state字段。
+4.2.20. 问：OnStrategyStateReport() 和 OnOrderEvent()，具体有什么区别？
+答：OnStrategyStateReport，是策略运行时策略状态通知，如：创建，执行，停止 这一类。OnOrderEvent是在订单未成交、全部成交、全部撤单、部分撤单、已拒绝这些状态时会有响应。
+4.2.21. 问：为什么已强停的母单，还一直推送OnStrategyStateReport()？
+答：因为行情价格还在刷新，行情价格变动会影响算法绩效的更新。
+4.2.22. 问：算法单运行时间到了设置的end_time之后，如果没有全部成交的话，怎样得到部分成交的状态呢？
+答：OnStrategyStateReport()推送的每条消息都会有母单状态，参见m_strategy_state字段。
+4.2.23. 问：策略运行时策略状态通知，OnStrategyStateReport()每次成交都通知一次，没有完结状态的通知是吧？
+答：结束也会通知的，结束和end_time没有必然的关系，要看算法什么时候停止。
+4.2.24. 问：算法单，批量停止和批量强停，这两个有什么区别呢？
+答：停止的操作需要一个过程，比如撤单或者平仓，算法完整停止后，会把母单状态m_strategy_state置为已停止。
+强停的操作是立即生效，所有的算法操作都会被拦截，平台会做一次撤单操作，如果是T0，会有敞口需要用户手动平仓。尽量不要用强停操作。
+4.2.25. 问：使用InsertAlgoOrder()报算法单后，OnOrderEvent()返回的是拆单后每个子单的订单状态。那算法母单的状态（例如全部成交、部分成交、撤单、拒单等），是否有对应的接口或者方法获取？
+答：运行的策略状态有变化时，OnStrategyStateReport()会推送策略状态通知，可根据策略的已委托数量、已成交数量、已撤单数量字段来间接计算母单的成交状态。
+4.2.26. 问：如何判断母单是否结束？
+答：看策略状态字段 m_strategy_state，已停止 XTP_STRATEGY_STATE_STOPPED、销毁中 XTP_STRATEGY_STATE_DESTROYING、已销毁 XTP_STRATEGY_STATE_DESTROYED，都可视为母单已结束。
+4.2.27. 问：母单状态XTPStrategyStateType：已执行、已停止、已销毁，这3种状态的区别在哪里？
+答：已执行，是策略执行完毕；已停止：一般是算法执行完成后的状态，或者是用户手动停止算法的状态；已销毁：是用户强制停止母单后的状态。已停止和已销毁状态，都不会再有交易发生。
+4.2.28. 问：报算法单后如果母单被拒单，如何查看拒单信息？
+答：如果是发送母单失败时被拒单，可查看OnInsertAlgoOrder()返回的error_info信息，如果是母单运行时被拒单，可查看OnStrategyStateReport()返回的error_info信息。
+4.2.29. 问：如果母单撤单被拒单，如何查看拒单信息？
+答：撤单被拒，OnCancelAlgoOrder()会返回error_info信息。
+4.2.30. 问：手动批量停止算法单，是不会产生OnCancelAlgoOrder()回调吗？
+答：也会有OnCancelAlgoOrder()回调的。
+5．测试FAQ   ​
+5.1. 测试账号  ​
+5.1.1. 问：如何获取XTP-Pro测试账号？
+答：XTP-Pro测试账号也可登录官网  https://xtp.zts.com.cn  申请。
+5.1.2. 问：测试环境下，登录测试行情、交易、算法的IP、Port是多少？
+答：在官网申请测试账号成功后，在申请XTP-Pro测试账号页面 会显示测试账号、行情地址、交易地址、算法总线地址。
+5.2. 测试问题  ​
+5.2.1. 问：公网测试环境，可测试的时间段有哪些？
+答：XTP-Pro 4.0环境，登录的连通性测试和报单测试，是从早上9点~22点，但是接收行情是从9点~16:30，交易所不推送行情就没有数据了。
+5.2.2. 问：公网测试环境，行情数据更新频率是怎样的？
+答：公网测试环境行情来自于交易所的转发数据，推送频率跟实盘一致。XTP-Pro收盘后没有循环回放行情，如果要测试行情数据，请注意尽量在交易时段9:10~15:30测试。
+5.2.3. 问：公网测试环境，行情数据有的时候为什么不动了？
+答：公网测试环境，因为带宽有限，订阅数量太多会因为网络拥堵导致推送不及时，从而影响到行情数据的获取。在闭市时间段内，只有静态行情，此时行情是不会变的。如果在开市时间段内，行情数据不动，请联系我们的技术人员。
+5.2.4. 问：测试环境下，我Api方式订阅快照，OnSubMarketData()返回：ErrorId=11210100. ErrorMsg=tickers or sessions used up，这是什么原因呢？
+答：您订阅合约的数量超限了。因为公网环境下带宽有限，而且是TCP连接，订阅太多时会造成网路堵塞，所以我们做了订阅数量限制。
+如果是单订阅，单市场是100只，沪深2个市场总共200只。
+如果是全市场订阅，只推送7只合约：000002、600000、159901、300002、399001、510050、688001。
+5.2.5. 问：测试环境下，可以收到订阅的北交所行情吗？
+答：订阅成功了也收不到，测试环境是TCP连接，没有部署北交所行情、指数通行情，港股通行情。
+5.2.6. 问：测试环境下，当全市场订阅行情时，为何一会儿就会断线？
+答：请按如下顺序检查您的程序：
+是否在收到行情的Spi回调函数里，能够迅速返回？请在回调函数里只接收数据，在另外的线程里处理其他逻辑。
+是否有屏幕输出？如果有，请减少屏幕输出，或者不输出。
+接收行情的线程是否有堵塞，是否线程挂起了？ 注意：在公网测试环境下，由于带宽有限，如果订阅行情数过多，容易导致缓冲区满，从而造成断线，请在公网测试环境下，少订阅几只股票测试。
+5.2.7. 问：demo程序为何一直在下单？
+答：demo测试程序采用的是乒乓测试下单，当收到OnOrderEvent()时，会根据订单的状态来触发撤单或者新一轮下单。除了在xtp_api_demo.cpp文件中有InsertOrder()的调用，在trade_spi.cpp文件的OnOrderEvent()响应函数中，也有InsertOrder()的调用。可根据需求自行修改报单程序。
+5.2.8. 问：测试环境下，模拟撮合采取的撮合策略是怎样的？
+答：测试环境下，目前默认采用的轮询模式进行撮合，按照未成交、全成(单笔成交回报)、部成、废单、全成(多笔成交回报) 轮流来撮合。如果想要设置不同的撮合方式，有如下方式：
+如果是在官网申请的测试账号，请至XTP官网的个人中心，设置撮合模式配置。此设置约10分钟后生效。生效后在smartX客户端报单、API方式报单都按照配置的模式来撮合。
+如果使用API方式报单，可以直接在InsertOrder()中设置order_client_id数值来撮合。如果官网也设置了，此时API设置的优先级高于官网，即按API设置的方式来撮合。
+新撮合版本升级后，上海和深圳统一是一套模式：
+设置模式  撮合模式
+auto   轮询（未成交、全成(单笔成交回报)、部成、废单、全成(多笔成交回报) 轮流来）
+confirm   未成交
+reportOne   全部成交(单笔成交回报)
+part   部分成交
+reject   拒单
+reportMore   全部成交(多笔成交回报)
+quote   按当前快照盘口行情撮合
+模拟撮合针对API方式下单，新增用户自定义撮合方式，利用InsertOrder时报单所填的order_client_id数值，按如下模式撮合：
+1-未成交、2-全成（单笔成交回报）、3-部成、4-废单、5-全成(多笔成交回报)、 6-按当前快照盘口行情撮合
+对于6-按当前快照盘口行情撮合，目前并不是对所有股票生效，支持规则参考如下：
+① 上海深圳都支持：主板，科创板（包含cdr），创业板，etf买卖；
+② 上海支持债券，深圳不支持债券；
+③ 上海深圳都不支持：逆回购，etf申赎，配股配债，新股申购等非交易业务；
+④ 算法账户不支持；
+5.2.9. 问：在公网测试环境下，为什么我无法卖出我昨日买入的持仓？如何保留每天的交易数据？
+答：因为公网测试环境是不做清算的，每日都会将账户初始化至最初的状态，也就是说今日买入的持仓，第二日不会进入昨日持仓，所有资金和持仓数据均保持初始状态。可登录官网  https://xtp.zts.com.cn/login  自行设置保留持仓和资金，还可以清空持仓、资金蓝补。
+5.2.10. 问：按行情模拟撮合，限价单委托买入普通股票，而且委托价格高于卖一价，为什么没有马上成交呢？
+答：是按照当前快照十档盘口的对手方来撮合成交，如果此时对手盘的数量不足，那您的报单就无法成交，只能等到有价有量时再次撮合才会成交，而且撮合结果不会影响行情。
+5.2.11. 问：按行情模拟撮合，如果我有很多笔买入报单，委托总数量超过了对手盘的数量，是不是只成交一部分？
+答：是的，因为要看对手盘的数量，如果不够只会成交一部分，未成交部分等行情来了再次撮合。
+5.2.12. 问：公网测试环境的订单响应速度不是那么快啊？
+答：公网测试环境除了网络延迟比较大之外，模拟撮合的速度也有一定的延迟，以上交所模拟撮合为例，是1秒一个周期进行轮询，如果你下单的时候正好进入下一个周期，那么最晚需要1秒才会收到订单响应。
+5.2.13. 问：测试环境可以进行资金划拨操作测试吗？
+答：不可以，资金划拨需要开启金证kesb环境，目前测试环境没有开启，所以不支持资金划拨测试。
+最后更新:
+Pager
+上一页  行情服务接入前指引
+下一页  错误代码速查表
+鲁ICP备09057662号 | 鲁公网安备 37010302000722号
+Copyright © 2015-2026 All Rights Reserved. 版权所有 中泰证券股份有限公司

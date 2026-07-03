@@ -335,6 +335,10 @@ def _on_depth_market_data(
         if exchange is None:
             return
 
+        # XTP Pro: data_type_v2 区分 stk/opt/bond 子字典
+        # data_type 已移除，必须使用 data_type_v2
+        data_type_v2: int = data.get("data_type_v2", 0)
+
         tick: TickData = TickData(
             symbol=data["ticker"],
             exchange=exchange,
@@ -350,6 +354,13 @@ def _on_depth_market_data(
             pre_close=data["pre_close_price"],
             gateway_name="XTP_PRO",
         )
+
+        # XTP Pro 透传交易所原始 ticker_status（不再做转换）
+        # 沪市: ticker_status[0]=S/C/T/E/P/M/N/U, [1]=0/1, [2]=0/1, [3]=0/1
+        # 深市: ticker_status[0]=S/O/T/B/C/E/H/A/V, [1]=0/1
+        ticker_status: str = data.get("ticker_status", "")
+        if ticker_status:
+            tick.extra = {"ticker_status": ticker_status, "data_type_v2": data_type_v2}
 
         # 五档买卖盘
         tick.bid_price_1, tick.bid_price_2, tick.bid_price_3, tick.bid_price_4, tick.bid_price_5 = data["bid"][0:5]
@@ -477,7 +488,8 @@ def _md_process_worker(
 
         # 重连控制
         disconnected: bool = False
-        reconnect_delay: float = 5.0  # 重连等待秒数
+        # FAQ 2.1.21: 重连等待必须 >= 心跳间隔，否则登录不成功
+        reconnect_delay: float = max(5.0, float(heartbeat_interval))
 
         # 设置回调
         def _on_disconnected(reason: int) -> None:
@@ -503,6 +515,10 @@ def _md_process_worker(
             heartbeat_interval, local_ip,
         )
         log_queue.put(f"XTP Pro 行情子进程已连接 {server_ip}:{server_port}")
+
+        # FAQ 2.1.23: 实盘 UDP 必须配置 config_file，否则无法获取行情
+        if protocol == 2 and not config_file:
+            log_queue.put("警告: UDP模式未设置配置文件(quote_config.ini)，实盘环境将无法获取行情！")
 
         # 查询合约：逐市场查询，等待 is_last 后再查下一个（否则会断线！）
         for exchange_id in EXCHANGE_XTP2VT:

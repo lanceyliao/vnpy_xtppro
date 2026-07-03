@@ -1,0 +1,210 @@
+
+
+
+
+
+XTP-Pro API文档
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Skip to contentXTP-Pro API文档
+
+SearchK
+
+Main Navigation 业务列表
+
+Appearance
+
+MenuReturn to top
+
+Sidebar Navigation
+快速入门
+
+行情XQuote-API使用指南QuickStart
+
+交易XTrader-API使用指南QuickStart
+
+算法XAlgo-API使用指南QuickStart
+
+升级使用说明
+
+从XTP行情到XTP-Pro行情API的变化
+
+从XTP交易到XTP-Pro交易API的变化
+
+接口使用说明
+
+API接口说明与示例代码
+
+算法API接口说明与示例代码
+
+范例和教程
+
+关于L2行情数据回补功能的使用说明
+
+行情XQuote-API断线后应对措施
+
+交易分页查询示例代码
+
+资金划拨接口的示例代码
+
+新股申购逻辑示例代码
+
+配股逻辑示例代码
+
+Pro行情旧版配置文件参数说明
+
+帮助文档
+
+行情服务接入前指引
+
+API常见问题
+
+错误代码速查表
+
+Python版本SDK编译库说明
+
+算法流控及母单参数类型说明
+
+算法流控及母单参数示例
+
+订单的状态机图
+
+页面导航
+
+Pro行情旧版配置文件的参数说明
+目录
+1. 旧版配置文件的参数格式
+2. 旧版配置文件的参数使用说明
+
+行情配置文件quote_config.ini是XTP Pro版本实盘udp连接方式所必须设置的参数配置项，用户在Login之前调用接口SetConfigFile()进行设置。 行情API版本是1.2.0及其以下版本时，行情配置文件quote_config.ini的参数格式参照文本的说明，而使用行情API版本是1.2.1及其以上版本的请参照官网上的技术文档《从XTP行情到XTP Pro行情API的变化》里的说明。
+1. 旧版配置文件的参数格式 ​
+旧版本的行情配置文件quote_config.ini参数格式说明如下：
+[md]             #快照行情的参数设置
+decode_flag = 1  #1表示解码的快照数据，目前api提供的只有解码的行情数据
+parse_cpu_id = 2 #解析线程绑核的cpu核id(逻辑核)，0表示不绑核
+[md.normal]
+enable = ON  #ON 表示启用软件行情的快照， OFF表示不启用
+local_ip = 127.0.0.1  #接收快照所在组播组的网段的网卡地址
+recv_cpu_id = 3  #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+enable_efvi = OFF #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256 #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8  #二级缓存的大小，最小为8k个缓存单元
+[md.fpga]
+enable = OFF #ON表示启用硬件行情的快照，OFF表示不启用
+local_ip = 127.0.0.1 #接收快照所在组播组的网段的网卡地址
+recv_cpu_id = 3 #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+
+enable_efvi = OFF #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256 #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8   #二级缓存的大小，最小为8k个缓存单元
+
+[tbt]             #逐笔行情的参数设置
+decode_flag = 1   #1表示解码的逐笔数据，目前api提供的只有解码的行情数据
+parse_cpu_id = 4  #解析线程绑核的cpu核id(逻辑核)，0表示不绑核
+[tbt.normal]
+enable = ON  #ON表示启用软件行情的逐笔，OFF表示不启用
+local_ip = 127.0.0.1 #接收逐笔数据所在组播组的网段的网卡地址
+recv_cpu_id = 5   #接收线程绑核的cpu核id(逻辑核),0表示不绑核
+enable_efvi = OFF  #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256  #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8  #二级缓存的大小，最小为8k个缓存单元
+[tbt.fpga]
+enable = OFF   #ON表示启用硬件行情的逐笔，OFF表示不启用
+local_ip = 127.0.0.1 #接收逐笔数据所在组播组的网段的网卡地址
+recv_cpu_id = 5  #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+enable_efvi = OFF  #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256  #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8   #二级缓存的大小，最小为8k个缓存单元
+
+[ob]               #订单簿行情的参数设置
+decode_flag = 1    #1表示解码的订单簿数据，目前api提供的只有解码的行情数据。
+parse_cpu_id = 6   #解析线程绑核的cpu核id(逻辑核)，0表示不绑核
+[ob.normal]
+enable = ON  #ON表示启用软件行情的订单簿，OFF表示不启用
+local_ip = 127.0.0.1  #接收订单簿所在组播组的网段的网卡地址
+recv_cpu_id = 7     #接收线程绑核的cpu核id(逻辑核)，0表示不绑核
+enable_efvi = OFF   #基于solarflare网卡的一种api标识
+L1_buf_capacity = 256  #一级缓存的大小，最小为256k个缓存单元
+L2_buf_capacity = 8   #二级缓存的大小，最小为8k个缓存单元
+
+[idxpress]     #指数通行情的参数设置
+decode_flag = 1
+parse_cpu_id = 10
+[idxpress.normal]
+enable = ON
+local_ip = 127.0.0.1
+recv_cpu_id = 11
+enable_efvi = OFF
+L1_buf_capacity = 256
+L2_buf_capacity = 8
+
+[hkc]           #港股通行情的参数设置
+decode_flag = 1
+parse_cpu_id = 8
+[hkc.normal]
+enable = ON
+local_ip = 127.0.0.1
+recv_cpu_id = 9
+enable_efvi = OFF
+L1_buf_capacity = 256
+L2_buf_capacity = 8
+
+[subscribe_quote_type]
+sh_ob = OFF          #上海订单簿行情是否打开标志，OFF:关闭，ON：打开
+sz_ob = OFF          #深圳订单簿行情是否打开标志，OFF:关闭，ON：打开
+sh_level1_md_index = ON #L1沪市指数(指数、IOPV)快照行情是否打开标识
+sh_level1_md_stock = ON #L1 沪市股票(股票、基金、债券)快照行情是否打开标识
+sh_level1_md_option = ON  #L1 沪市期权快照行情是否打开标识
+sh_level2_md_index = ON  #L2 沪市指数快照行情是否打开标识
+sh_level2_md_stock = ON  #L2 沪市股票(股票、基金)快照行情是否打开标识
+sh_level2_md_bond = ON  #L2 沪市债券(可转债、国债逆回购等债券)快照行情是否打开标识
+sh_level2_tbt_stock = ON  #L2 沪市股票(股票、基金)逐笔行情是否打开标识
+sh_level2_tbt_bond = ON  #L2 沪市债券(可转债、国债逆回购等债券)逐笔行情是否打开标识
+sz_level1_md_index = ON  #L1 深市指数(指数、IOPV)快照行情是否打开标识
+sz_level1_md_stock = ON  #L1 深市股票(股票、基金、可转债)快照行情是否打开标识
+sz_level1_md_option = ON  #L1 深市期权快照行情是否打开标识
+sz_level1_md_bond = ON  #L1 深市债券(国债逆回购等其它债券)行情是否打开标识
+sz_level2_md_index = ON  #L2 深市指数(指数、IOPV)快照行情是否打开标识
+sz_level2_md_stock = ON  #L2 深市股票(股票、基金，可转债)快照行情是否打开标识
+sz_level2_md_bond = ON  #L2 深市债券(国债逆回购等其它债券)快照行情是否打开标识
+sz_level2_tbt_stock = ON  #L2 深市股票(股票、基金、可转债)逐笔行情是否打开标识
+sz_level2_tbt_bond = ON  #L2 深市债券(国债逆回购等其它债券)逐笔行情是否打开标识
+nq_rawtxt = OFF       #新三板股票行情是否打开标识
+nq_md_bond = OFF    #新三板债券快照行情是否打开标识
+nq_tbt_bond = OFF    #新三板债券逐笔行情是否打开标识
+#L1沪市指数通行情是否打开标识
+sh_level1_rawtxt = ON
+#以下为港股通hkc相关订阅配置
+sz_level1_md_hkc = ON
+sz_level1_md_hkcsta = ON
+
+2. 旧版配置文件的参数使用说明 ​
+对于md、tbt这两种行情，软件行情和硬件行情接收方式都设置启用的话，即对应行情下面,这两路行情数据接收方式，API会自动过滤出更快的行情数据并推送给用户，所以用户只会收到一份行情数据，不会收到两份同样的行情数据。
+md、tbt这两种行情，每种行情都有两路行情接收方式，即软件行情和硬件行情，对应两个接收线程，只有 才会启动对应的接收线程。ob行情只有软件行情的ob数据，对应一个接收线程，同样 才会启动对应的接收线程。如果接收线程绑核的话，两路行情接收方式的recv_cpu_id可以设定不同的cpu核id，也可以是相同的cpu核id，设置为0表示不绑核。
+md、tbt、ob这三种行情，分别对应三个解析线程，只要对应行情种类的下面有 就会启动该解析线程。如果解析线程绑核的话，三种行情的parse_cpu_id分别设定不同的cpu核id，如果设置为0，表示不绑核。
+parse_cpu_id和recv_cpu_id是设置绑核的cpu，如绑定cpu第二个逻辑核，设置为1，建议绑定后面的逻辑核。
+L1_buf_capacity和L2_buf_capacity缓存单元的大小跟数据类型有关。
+备注：旧版配置文件无法减少核使用数，如核数有限，需要减少程序中的绑核数，请升级行情API版本至1.2.1及其以上，使用配置文件中的busy_wait配置项。
+
+最后更新:
+
+Pager上一页配股逻辑示例代码
+下一页行情服务接入前指引
+
+鲁ICP备09057662号 | 鲁公网安备 37010302000722号
+Copyright © 2015-2026 All Rights Reserved. 版权所有 中泰证券股份有限公司
+
+
+
