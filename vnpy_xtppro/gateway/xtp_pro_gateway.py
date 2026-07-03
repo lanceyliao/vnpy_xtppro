@@ -971,7 +971,7 @@ class XtpProGateway(BaseGateway):
 
     def on_bar(self, bar: BarData) -> None:
         """推送 Bar 事件"""
-        event = Event(EVENT_BAR + bar.vt_symbol, bar)
+        event = Event(EVENT_BAR, bar)
         self.event_engine.put(event)
 
     def on_contract(self, contract: ContractData) -> None:

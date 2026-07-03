@@ -202,14 +202,13 @@ class TestXtpProIntegration:
         req = SubscribeRequest(symbol="600000", exchange=Exchange.SSE)
         gw.subscribe(req)
 
-        bar_topic = EVENT_BAR + "600000.SSE"
         bar_received = threading.Event()
 
         def _on_bar(event):
             collector.on_bar(event.data)
             bar_received.set()
 
-        ee.register(bar_topic, _on_bar)
+        ee.register(EVENT_BAR, _on_bar)
 
         bar_received.wait(timeout=90)
 
