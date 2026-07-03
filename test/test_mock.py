@@ -358,7 +358,7 @@ def test_gateway_lifecycle():
     gateway = XtpProGateway(ee, "XTP_PRO")
 
     assert gateway.default_name == "XTP_PRO"
-    assert gateway._process is None
+    assert gateway._process_slots == []
     assert gateway._drain_thread is None
     assert not gateway._drain_active
 

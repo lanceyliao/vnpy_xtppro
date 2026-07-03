@@ -98,6 +98,9 @@ DATA_TYPE_V2_MAP: dict[int, str] = {
 # 实盘 UDP 无数量限制，但务必先做接入测试
 MAX_SUBSCRIBE_PER_MARKET_TEST: int = 100
 
+# 多进程分片：每个 worker 进程的订阅容量，超限自动起新进程
+MAX_QUOTES_PER_PROCESS: int = 500
+
 # 队列参数
 QUEUE_DRAIN_BATCH_SIZE = 2000
 QUEUE_DRAIN_IDLE_SLEEP = 0.01
@@ -458,6 +461,7 @@ def _on_query_all_tickers(
 # ------------------------------------------------------------------
 
 def _md_process_worker(
+    process_id: int,
     userid: str,
     password: str,
     client_id: int,
@@ -468,7 +472,7 @@ def _md_process_worker(
     config_file: str,
     heartbeat_interval: int,
     local_ip: str,
-    max_subscribe: int,
+    max_quotes: int,
     tick_queue: mp.Queue,
     bar_queue: mp.Queue,
     log_queue: mp.Queue,
@@ -614,8 +618,8 @@ def _md_process_worker(
                 elif action == CMD_SUBSCRIBE:
                     symbol = command["symbol"]
                     exchange_id = command["exchange_id"]
-                    if len(subscribed_symbols) >= max_subscribe:
-                        log_queue.put(f"订阅已达上限 {max_subscribe}，跳过 {symbol}")
+                    if len(subscribed_symbols) >= max_quotes:
+                        log_queue.put(f"进程 #{process_id} 订阅已达上限 {max_quotes}，跳过 {symbol}")
                         continue
                     if symbol not in subscribed_symbols:
                         # 公网测试环境提醒
@@ -657,7 +661,7 @@ DEFAULT_PORT = 3002
 DEFAULT_PROTOCOL = "TCP"
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_HEARTBEAT_INTERVAL = 15
-DEFAULT_MAX_SUBSCRIBE = 0  # 0=不限制
+DEFAULT_MAX_QUOTES_PER_PROCESS = 500  # 每进程订阅容量，超限自动起新进程
 
 
 class XtpProGateway(BaseGateway):
@@ -673,15 +677,14 @@ class XtpProGateway(BaseGateway):
     def __init__(self, event_engine, gateway_name: str = "XTP_PRO") -> None:
         super().__init__(event_engine, gateway_name)
 
-        # 子进程通信
+        # 共享数据队列（所有子进程写入同一队列）
         self._tick_queue: mp.Queue = mp.Queue()
         self._bar_queue: mp.Queue = mp.Queue()
         self._log_queue: mp.Queue = mp.Queue()
-        self._command_queue: mp.Queue = mp.Queue()
         self._stop_event: mp.Event = mp.Event()
 
-        # 子进程句柄
-        self._process: Optional[mp.Process] = None
+        # 多进程分片：每个 slot 管理一个子进程
+        self._process_slots: List[Dict[str, Any]] = []
 
         # 主进程 drain 线程
         self._drain_thread: Optional[threading.Thread] = None
@@ -699,6 +702,7 @@ class XtpProGateway(BaseGateway):
 
         # 订阅管理
         self._subscribed: Set[str] = set()
+        self._max_quotes: int = DEFAULT_MAX_QUOTES_PER_PROCESS
 
     # ------------------------------------------------------------------
     # BaseGateway 接口
@@ -716,20 +720,18 @@ class XtpProGateway(BaseGateway):
         self._config_file = setting.get("配置文件", "")
         self._heartbeat_interval = int(setting.get("心跳间隔", DEFAULT_HEARTBEAT_INTERVAL))
         self._local_ip = setting.get("本地网卡IP", "")
-        self._max_subscribe = int(setting.get("最大订阅数", DEFAULT_MAX_SUBSCRIBE))
-
-        # 启动子进程
-        self._start_process()
+        self._max_quotes = int(setting.get("每进程订阅数", DEFAULT_MAX_QUOTES_PER_PROCESS))
 
         # 启动 drain 线程
         self._start_drain()
 
         self.write_log(
-            f"XTP Pro 行情网关已启动，服务器: {self._server_ip}:{self._server_port}"
+            f"XTP Pro 行情网关已启动，服务器: {self._server_ip}:{self._server_port}，"
+            f"每进程容量: {self._max_quotes}"
         )
 
     def subscribe(self, req: SubscribeRequest) -> None:
-        """订阅行情"""
+        """订阅行情：分配到有空位的子进程，满则起新进程"""
         if req.vt_symbol in self._subscribed:
             return
 
@@ -739,7 +741,11 @@ class XtpProGateway(BaseGateway):
             return
 
         self._subscribed.add(req.vt_symbol)
-        self._command_queue.put({
+
+        # 找有空位的 slot，或起新进程
+        slot = self._allocate_process_slot()
+        slot["symbols"].add(req.vt_symbol)
+        slot["command_queue"].put({
             "action": CMD_SUBSCRIBE,
             "symbol": req.symbol,
             "exchange_id": exchange_id,
@@ -752,15 +758,38 @@ class XtpProGateway(BaseGateway):
         if self._drain_thread and self._drain_thread.is_alive():
             self._drain_thread.join(timeout=5)
 
-        # 停止子进程
+        # 停止所有子进程
         self._stop_event.set()
-        self._command_queue.put({"action": CMD_STOP})
-        if self._process and self._process.is_alive():
-            self._process.join(timeout=10)
-            if self._process.is_alive():
-                self._process.kill()
+        for slot in self._process_slots:
+            try:
+                slot["command_queue"].put({"action": CMD_STOP})
+            except Exception:
+                pass
 
-        self._process = None
+        for slot in self._process_slots:
+            process = slot["process"]
+            if process.is_alive():
+                process.join(timeout=10)
+                if process.is_alive():
+                    process.kill()
+
+        # 清理队列
+        for q in (self._tick_queue, self._bar_queue, self._log_queue):
+            try:
+                q.close()
+                q.join_thread()
+            except Exception:
+                pass
+        for slot in self._process_slots:
+            cq = slot.get("command_queue")
+            if cq is not None:
+                try:
+                    cq.close()
+                    cq.join_thread()
+                except Exception:
+                    pass
+
+        self._process_slots.clear()
         self._subscribed.clear()
         self.write_log("XTP Pro 行情网关已关闭")
 
@@ -768,13 +797,25 @@ class XtpProGateway(BaseGateway):
     # 内部方法
     # ------------------------------------------------------------------
 
-    def _start_process(self) -> None:
-        """启动行情子进程"""
+    def _allocate_process_slot(self) -> Dict[str, Any]:
+        """找有空位的子进程 slot，满则起新进程"""
+        # 先清理已死进程的 slot
+        self._prune_dead_slots()
+
+        # 找有空位的
+        for slot in self._process_slots:
+            if len(slot["symbols"]) < self._max_quotes and slot["process"].is_alive():
+                return slot
+
+        # 所有 slot 满了或没有 slot，起新进程
+        process_id = len(self._process_slots) + 1
+        command_queue: mp.Queue = mp.Queue()
         self._stop_event.clear()
 
-        self._process = mp.Process(
+        process = mp.Process(
             target=_md_process_worker,
             args=(
+                process_id,
                 self._userid,
                 self._password,
                 self._client_id,
@@ -785,17 +826,42 @@ class XtpProGateway(BaseGateway):
                 self._config_file,
                 self._heartbeat_interval,
                 self._local_ip,
-                self._max_subscribe,
+                self._max_quotes,
                 self._tick_queue,
                 self._bar_queue,
                 self._log_queue,
-                self._command_queue,
+                command_queue,
                 self._stop_event,
             ),
-            name="XtpProMdProcess",
+            name=f"XtpProMdProcess-{process_id}",
             daemon=True,
         )
-        self._process.start()
+        process.start()
+
+        slot = {
+            "process_id": process_id,
+            "process": process,
+            "command_queue": command_queue,
+            "symbols": set(),
+        }
+        self._process_slots.append(slot)
+        self.write_log(f"已启动行情子进程 #{process_id}")
+        return slot
+
+    def _prune_dead_slots(self) -> None:
+        """清理已退出子进程的 slot"""
+        i = 0
+        while i < len(self._process_slots):
+            slot = self._process_slots[i]
+            if slot["process"].is_alive():
+                i += 1
+                continue
+            dead_symbols = slot["symbols"]
+            self._process_slots.pop(i)
+            self._subscribed.difference_update(dead_symbols)
+            self.write_log(
+                f"检测到子进程 #{slot['process_id']} 已退出，回收 {len(dead_symbols)} 个订阅"
+            )
 
     def _start_drain(self) -> None:
         """启动主进程 drain 线程"""
@@ -918,5 +984,5 @@ def get_default_setting() -> Dict[str, Any]:
         "配置文件": "",
         "心跳间隔": DEFAULT_HEARTBEAT_INTERVAL,
         "本地网卡IP": "",
-        "最大订阅数": DEFAULT_MAX_SUBSCRIBE,
+        "每进程订阅数": DEFAULT_MAX_QUOTES_PER_PROCESS,
     }
