@@ -252,14 +252,10 @@ jobs:
 
       - name: Install system dependencies (ta-lib + Boost)
         run: |
-          # TA-Lib C 库
+          # TA-Lib C 库 — 直接用官方 deb 包（比 source compile 快且稳）
           cd /tmp
-          wget -q https://github.com/ta-lib/ta-lib/releases/download/v0.6.4/ta-lib-0.6.4.tar.gz
-          tar xzf ta-lib-0.6.4.tar.gz
-          cd ta-lib-0.6.4/
-          ./configure --prefix=/usr/local
-          make -j$(nproc)
-          sudo make install
+          wget -q https://github.com/TA-Lib/ta-lib/releases/download/v0.6.4/ta-lib_0.6.4_amd64.deb
+          sudo dpkg -i ta-lib_0.6.4_amd64.deb
           sudo ldconfig
 
           # Boost.Python (vnpy 依赖)
