@@ -278,6 +278,8 @@ jobs:
         run: |
           python -c "from vnpy_xtppro.gateway import XtpProGateway; print('✓ XtpProGateway imported')"
           python -c "from vnpy_xtppro.api.xtp_pro_md_api import XtpProMdApi; print('✓ XtpProMdApi imported')"
+          python -c "from vnxtpxquote import QuoteApi; print('✓ vnxtpxquote C++ binding imported')"
+          python -c "import vnxtpxquote; print('✓ vnxtpxquote dir:', [x for x in dir(vnxtpxquote) if not x.startswith('_')][:10])"
 
       - name: Run integration test (real XTP Pro MD server)
         env:

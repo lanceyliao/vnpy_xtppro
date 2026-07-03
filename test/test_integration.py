@@ -122,6 +122,14 @@ class TestXtpProIntegration:
 
         # 验证 worker 进程存活（= 登录成功）
         assert len(gw._process_slots) > 0, "应有至少一个 worker 进程"
+
+        # 检查是否有 worker 异常退出（如 vnxtpxquote 导入失败）
+        with collector._lock:
+            logs = list(collector.logs)
+        for log in logs:
+            if "子进程异常" in log:
+                pytest.fail(f"worker 进程异常退出: {log}")
+
         worker_alive = any(
             slot["process"].is_alive() for slot in gw._process_slots
         )

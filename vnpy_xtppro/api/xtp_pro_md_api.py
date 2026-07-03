@@ -99,15 +99,22 @@ class XtpProMdApi:
     def _create_api(self) -> None:
         """创建 QuoteApi 实例
 
-        优先从自带 libs 目录加载 vnxtpxquote，无需外部安装。
+        vnxtpxquote.so 由 meson 编译安装到 vnpy_xtppro/api/ 目录，
+        需要将该目录加入 sys.path 才能 import。
+        同时兼容旧版 libs/ 子目录布局。
         """
         import sys
         import os
 
-        # 尝试从自带 libs 目录加载
         api_dir = Path(__file__).parent
-        libs_dir = api_dir / "libs"
+        api_dir_str = str(api_dir)
 
+        # 将 api 目录加入 sys.path（meson 编译的 .so 在这里）
+        if api_dir_str not in sys.path:
+            sys.path.insert(0, api_dir_str)
+
+        # 兼容旧版 libs/ 子目录布局
+        libs_dir = api_dir / "libs"
         if sys.platform == "linux":
             platform_dir = libs_dir / "linux_x86_64"
         elif sys.platform == "win32":
@@ -115,12 +122,11 @@ class XtpProMdApi:
         else:
             platform_dir = None
 
-        # 将平台库目录加入搜索路径
         if platform_dir and platform_dir.exists():
             platform_str = str(platform_dir)
             if platform_str not in sys.path:
                 sys.path.insert(0, platform_str)
-            # Linux: 也需要设置 LD_LIBRARY_PATH 让 .so 找到依赖
+            # Linux: 设置 LD_LIBRARY_PATH 让 .so 找到依赖
             if sys.platform == "linux":
                 ld_path = os.environ.get("LD_LIBRARY_PATH", "")
                 if platform_str not in ld_path:
@@ -128,14 +134,23 @@ class XtpProMdApi:
                         f"{platform_str}:{ld_path}" if ld_path else platform_str
                     )
 
+        # Linux: 也把 api_dir 加到 LD_LIBRARY_PATH（libxtpxquoteapi.so 在这里）
+        if sys.platform == "linux":
+            ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+            if api_dir_str not in ld_path:
+                os.environ["LD_LIBRARY_PATH"] = (
+                    f"{api_dir_str}:{ld_path}" if ld_path else api_dir_str
+                )
+
         try:
             from vnxtpxquote import QuoteApi
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
-                "无法导入 vnxtpxquote。请先编译 C++ 绑定：\n"
+                f"无法导入 vnxtpxquote: {e}\n"
+                "请先编译 C++ 绑定：\n"
                 "  cd api && meson setup builddir --prefix=/usr/local && ninja -C builddir install\n"
                 "或确保 vnxtpxquote.so/.pyd 在 Python 搜索路径中"
-            )
+            ) from e
 
         self._api = QuoteApi()
         path: Path = get_folder_path("xtppro")
