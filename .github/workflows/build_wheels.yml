@@ -63,51 +63,50 @@ jobs:
           # 验证
           ldconfig -p | grep libboost_python || ls -la /usr/local/lib/libboost_python* 2>/dev/null
 
-      # ---- Windows: 用 conda-forge 安装预编译 Boost.Python ----
-      - name: Set up Miniconda (Windows)
+      # ---- Windows: 从源码编译 Boost.Python (带缓存) ----
+      - name: Cache Boost build (Windows)
         if: runner.os == 'Windows'
-        uses: conda-incubator/setup-miniconda@v3
+        id: cache-boost
+        uses: actions/cache@v4
         with:
-          auto-activate-base: false
-          channels: conda-forge,defaults
-          channel-priority: strict
+          path: C:\boost_install
+          key: boost-1.84.0-python${{ matrix.python-version }}-msvc
 
-      - name: Install Boost.Python via conda-forge (Windows)
+      - name: Build Boost.Python from source (Windows)
+        if: runner.os == 'Windows' && steps.cache-boost.outputs.cache-hit != 'true'
+        shell: cmd
+        run: |
+          echo Building Boost.Python from source...
+          set BOOST_VER=1.84.0
+          set BOOST_DIR=boost_1_84_0
+
+          cd \tmp
+          curl -L -o boost.tar.gz "https://sourceforge.net/projects/boost/files/boost/%BOOST_VER%/%BOOST_DIR%.tar.gz/download"
+          tar xzf boost.tar.gz
+          cd %BOOST_DIR%
+
+          :: Bootstrap with current Python
+          call bootstrap.bat --with-python=python --with-python-version=${{ matrix.python-version }}
+
+          :: Build only what we need
+          b2 --with-python --with-thread --with-system variant=release link=shared threading=multi runtime-link=shared --prefix=C:\boost_install -j2 install
+
+      - name: Set Boost environment (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Install pre-built Boost into base env (just for the files, not for Python)
-          conda install -y -c conda-forge libboost-python boost-cpp
-
-          # conda base env path
-          $condaBase = conda info --base
-
-          # conda-forge layout: Library/include + Library/lib
-          $boostInclude = "$condaBase\Library\include"
-          $boostLib = "$condaBase\Library\lib"
-
-          Write-Host "Boost include: $boostInclude"
-          Write-Host "Boost lib: $boostLib"
+          $boostRoot = "C:\boost_install"
+          echo "BOOST_ROOT=$boostRoot" >> $env:GITHUB_ENV
+          echo "BOOST_INCLUDE=$boostRoot\include" >> $env:GITHUB_ENV
+          echo "BOOST_LIB=$boostRoot\lib" >> $env:GITHUB_ENV
 
           # Verify
-          if (Test-Path "$boostInclude\boost") {
-            Write-Host "✅ Boost headers found at $boostInclude"
+          if (Test-Path "$boostRoot\include\boost") {
+            Write-Host "✅ Boost headers found"
           } else {
-            Write-Host "❌ Boost headers NOT found at $boostInclude"
-            # Try alternative layout
-            $boostInclude = "$condaBase\include"
-            $boostLib = "$condaBase\lib"
-            if (Test-Path "$boostInclude\boost") {
-              Write-Host "✅ Boost headers found at alternative: $boostInclude"
-            }
+            Write-Host "❌ Boost headers NOT found at $boostRoot\include"
           }
-
-          # List boost_python libs
-          Get-ChildItem "$boostLib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
-
-          # Export for meson
-          echo "BOOST_INCLUDE=$boostInclude" >> $env:GITHUB_ENV
-          echo "BOOST_LIB=$boostLib" >> $env:GITHUB_ENV
+          Get-ChildItem "$boostRoot\lib\*boost_python*" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  lib: $_" }
 
       - name: Set up MSVC dev environment (Windows)
         if: runner.os == 'Windows'
@@ -126,18 +125,7 @@ jobs:
           CC: cl
           CXX: cl
         run: |
-          # Ensure we use setup-python's Python, not conda's
-          # setup-python puts its Python first in PATH, but conda may override
-          $setupPyDir = "C:\hostedtoolcache\windows\Python\${{ matrix.python-version }}.*\x64"
-          $setupPy = (Get-ChildItem "$setupPyDir\python.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
-          if ($setupPy) {
-            Write-Host "Using setup-python: $setupPy"
-            & $setupPy -m pip install build wheel setuptools meson-python meson ninja 2>$null
-            & $setupPy -m build --wheel
-          } else {
-            Write-Host "Falling back to python in PATH"
-            python -m build --wheel
-          }
+          python -m build --wheel
 
       # ---- Validate ----
       - name: Validate Linux wheel exists
