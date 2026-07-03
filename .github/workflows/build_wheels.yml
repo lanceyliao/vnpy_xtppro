@@ -222,3 +222,70 @@ jobs:
       - name: Run pure Python tests (bar_generator, unit, mock)
         run: |
           python -m pytest test/test_bar_generator.py test/test_unit.py test/test_mock.py -v --tb=short
+
+
+  # ---- 真实行情集成测试（Linux x86-64 + 编译好的 wheel）----
+  integration:
+    name: Integration Test (real MD server)
+    runs-on: ubuntu-latest
+    needs: build  # 等 wheel 构建完
+    # 只在 main/master 分支且非 PR 时跑，避免 PR 泄露密钥
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download built wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: vnpy_xtppro-ubuntu-X64-py${{ matrix.python-version }}
+          path: dist
+
+      - name: Install system dependencies (ta-lib + Boost)
+        run: |
+          # TA-Lib C 库
+          cd /tmp
+          wget -q https://github.com/ta-lib/ta-lib/releases/download/v0.6.4/ta-lib-0.6.4.tar.gz
+          tar xzf ta-lib-0.6.4.tar.gz
+          cd ta-lib-0.6.4/
+          ./configure --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+
+          # Boost.Python (vnpy 依赖)
+          PY_VER_NODOT=$(python3 -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
+          sudo apt-get update
+          sudo apt-get install -y libboost-dev libboost-python${PY_VER_NODOT}-dev || true
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install vnpy ta-lib pytest pytest-timeout
+
+      - name: Install vnpy_xtppro wheel
+        run: |
+          WHEEL=$(ls dist/*.whl | head -1)
+          echo "Installing: $WHEEL"
+          pip install "$WHEEL"
+
+      - name: Verify installation
+        run: |
+          python -c "from vnpy_xtppro.gateway import XtpProGateway; print('✓ XtpProGateway imported')"
+          python -c "from vnpy_xtppro.api.xtp_pro_md_api import XtpProMdApi; print('✓ XtpProMdApi imported')"
+
+      - name: Run integration test (real XTP Pro MD server)
+        env:
+          XTP_PRO_TEST_USER: ${{ secrets.XTP_PRO_TEST_USER }}
+          XTP_PRO_TEST_PASSWORD: ${{ secrets.XTP_PRO_TEST_PASSWORD }}
+        run: |
+          python -m pytest test/test_integration.py -v --tb=long -s --timeout=120
