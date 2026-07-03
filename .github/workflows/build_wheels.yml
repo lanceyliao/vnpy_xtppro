@@ -70,27 +70,31 @@ jobs:
         run: |
           $BOOST_VER = "1.84.0"
           $BOOST_DIR = "boost_$($BOOST_VER.Replace('.','_'))"
-          $env:BOOST_ROOT = "C:\$BOOST_DIR"
 
-          if (-not (Test-Path $env:BOOST_ROOT)) {
-            Write-Host "Downloading Boost $BOOST_VER from GitHub mirror..."
-            # Use GitHub Actions-friendly URL (SourceForge blocks WebClient)
-            $url = "https://github.com/boostorg/boost/releases/download/boost-${BOOST_VER}/${BOOST_DIR}.tar.gz"
-            try {
-              Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\boost.tar.gz" -MaximumRedirection 5
-            } catch {
-              Write-Host "GitHub mirror failed, trying GHA Boost install action..."
-              # Fallback: use conda-forge or choco
-              choco install boost-msvc-14.2 -y 2>$null || choco install boost -y 2>$null
-              return
-            }
-            tar xzf "$env:TEMP\boost.tar.gz" -C C:\
-            cd "C:\$BOOST_DIR"
-            .\bootstrap.bat --with-python
-            .\b2 --with-python --with-thread --with-system variant=release link=shared threading=multi -j2 install
+          # Check if already installed via choco
+          $chocoBoost = "C:\local\boost_1_84_0"
+          if (Test-Path "$chocoBoost\boost") {
+            $env:BOOST_ROOT = $chocoBoost
+            echo "BOOST_ROOT=$env:BOOST_ROOT" >> $env:GITHUB_ENV
+            echo "Boost already installed at $chocoBoost"
+            return
           }
 
+          # Try conda-forge prebuilt boost (fastest)
+          Write-Host "Installing Boost via conda-forge..."
+          pip install conda 2>$null
+          # Use vcpkg for Boost
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg 2>$null
+          if (Test-Path C:\vcpkg\vcpkg.exe) {
+            Write-Host "vcpkg already bootstrapped"
+          } else {
+            cd C:\vcpkg
+            .\bootstrap-vcpkg.bat -disableMetrics
+          }
+          C:\vcpkg\vcpkg install boost-python:x64-windows boost-thread:x64-windows boost-system:x64-windows
+          $env:BOOST_ROOT = "C:\vcpkg\installed\x64-windows"
           echo "BOOST_ROOT=$env:BOOST_ROOT" >> $env:GITHUB_ENV
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
 
       # ---- Build wheel ----
       - name: Set up MSVC dev environment (Windows)

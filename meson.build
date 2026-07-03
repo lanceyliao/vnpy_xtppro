@@ -79,36 +79,88 @@ else
 endif
 
 # ---- 查找 Boost.Python ----
-# Boost.Python 是 XTP Pro 绑定所必需的（不同于 CTP 的 pybind11）
+# XTP Pro 绑定依赖 Boost.Python（不同于 CTP 的 pybind11）
 py_ver = py.version()
 py_major = py_ver.split('.').get(0)
 py_minor = py_ver.split('.').get(1)
 
+# 尝试多种方式查找 Boost.Python
+boost_python_dep = dependency('', required: false)
+
+# 1. 尝试 pkg-config / cmake / meson dependency
 boost_python_names = [
   'boost_python' + py_major + py_minor,     # boost_python310
   'boost_python' + py_major,                 # boost_python3
   'boost_python-py' + py_major + py_minor,  # boost_python-py310
+  'Boost::python' + py_major + py_minor,    # cmake target
 ]
 
-boost_python_dep = dependency('', required: false)
 foreach name : boost_python_names
   if not boost_python_dep.found()
     boost_python_dep = dependency(name, required: false)
   endif
 endforeach
 
+# 2. 尝试编译器直接查找
 if not boost_python_dep.found()
-  # 尝试用编译器查找
-  boost_python_dep = cpp.find_library(
+  boost_python_lib_names = [
     'boost_python' + py_major + py_minor,
-    required: false,
-  )
+    'boost_python' + py_major,
+    'boost_python3',
+  ]
+  foreach name : boost_python_lib_names
+    if not boost_python_dep.found()
+      boost_python_dep = cpp.find_library(name, required: false)
+    endif
+  endforeach
+endif
+
+# 3. Windows: 检查 vcpkg 安装路径
+if host_machine.system() == 'windows' and not boost_python_dep.found()
+  vcpkg_root = run_command('cmd', '/c', 'echo %VCPKG_ROOT%', check: false).stdout().strip()
+  if vcpkg_root != '' and vcpkg_root != '%VCPKG_ROOT%'
+    message('Trying vcpkg Boost at: ' + vcpkg_root)
+    vcpkg_include = vcpkg_root / 'installed/x64-windows/include'
+    vcpkg_lib = vcpkg_root / 'installed/x64-windows/lib'
+    if fs.is_dir(vcpkg_include)
+      include_dirs = include_dirs, include_directories(vcpkg_include)
+      foreach name : boost_python_lib_names
+        if not boost_python_dep.found()
+          boost_python_dep = cpp.find_library(name, dirs: [vcpkg_lib], required: false)
+        endif
+      endforeach
+    endif
+  endif
+
+  # Also check BOOST_ROOT
+  boost_root = run_command('cmd', '/c', 'echo %BOOST_ROOT%', check: false).stdout().strip()
+  if boost_root != '' and boost_root != '%BOOST_ROOT%' and not boost_python_dep.found()
+    message('Trying BOOST_ROOT at: ' + boost_root)
+    br_include = boost_root / 'include'
+    br_lib = boost_root / 'lib'
+    if fs.is_dir(br_include)
+      include_dirs = include_dirs, include_directories(br_include)
+      foreach name : boost_python_lib_names
+        if not boost_python_dep.found()
+          boost_python_dep = cpp.find_library(name, dirs: [br_lib], required: false)
+        endif
+      endforeach
+    endif
+  endif
+endif
+
+# 4. Linux: 检查 /usr/local
+if host_machine.system() != 'windows' and not boost_python_dep.found()
+  foreach name : boost_python_lib_names
+    if not boost_python_dep.found()
+      boost_python_dep = cpp.find_library(name, dirs: ['/usr/local/lib'], required: false)
+    endif
+  endforeach
 endif
 
 if not boost_python_dep.found()
-  warning('Boost.Python not found via dependency or find_library. ' +
-          'XTP Pro bindings require Boost.Python. ' +
-          'Compile: bjam --with-python variant=release link=shared')
+  error('Boost.Python not found! XTP Pro bindings require Boost.Python. ' +
+        'Install: b2 --with-python variant=release link=shared install')
 endif
 
 message('Using Boost.Python: ' + boost_python_dep.name())
@@ -132,11 +184,11 @@ md_module = py.extension_module(
   include_directories: include_dirs,
   dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep],
   cpp_args: extra_cpp_args,
-  link_args: extra_link_args + [
+  link_args: extra_link_args + (host_machine.system() != 'windows' ? [
     '-L' + lib_dir,
     '-lxtpxquoteapi',
     '-Wl,-rpath,$ORIGIN',
-  ],
+  ] : []),
   install: true,
   install_rpath: install_rpath_value,
   subdir: 'vnpy_xtppro/api',
@@ -149,11 +201,11 @@ td_module = py.extension_module(
   include_directories: include_dirs,
   dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep],
   cpp_args: extra_cpp_args,
-  link_args: extra_link_args + [
+  link_args: extra_link_args + (host_machine.system() != 'windows' ? [
     '-L' + lib_dir,
     '-lxtpxtraderapi',
     '-Wl,-rpath,$ORIGIN',
-  ],
+  ] : []),
   install: true,
   install_rpath: install_rpath_value,
   subdir: 'vnpy_xtppro/api',
