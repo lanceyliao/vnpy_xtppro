@@ -54,7 +54,7 @@ jobs:
             tar xzf boost.tar.gz
             cd ${BOOST_DIR}
             ./bootstrap.sh --with-python=python3 --with-python-version=${PY_VER}
-            sudo ./b2 --with-python --with-thread --with-system variant=release link=static runtime-link=shared threading=multi cxxflags=-fPIC cflags=-fPIC -j$(nproc) install
+            sudo ./b2 --with-python --with-thread --with-system variant=release link=static runtime-link=shared threading=multi cxxflags=-fPIC cflags=-fPIC visibility=global -j$(nproc) install
             sudo ldconfig
           fi
 
