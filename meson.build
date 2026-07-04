@@ -143,15 +143,16 @@ if host_machine.system() != 'windows' and not boost_python_dep.found()
   boost_thread_dep = cpp.find_library('boost_thread', dirs: ['/usr/local/lib'], required: false)
   boost_system_dep = cpp.find_library('boost_system', dirs: ['/usr/local/lib'], required: false)
   boost_chrono_dep = cpp.find_library('boost_chrono', dirs: ['/usr/local/lib'], required: false)
-  # 强制 static link: 把 .a 完整路径加到 link_args，绕过 --as-needed
+  # 强制 static link: 用 --whole-archive 确保所有 Boost 符号被拉入
+  # （--as-needed 会跳过"未被直接引用"的 static 库符号）
   if boost_thread_dep.found()
-    boost_static_link_args += ['/usr/local/lib/libboost_thread.a']
+    boost_static_link_args += ['-Wl,--whole-archive', '/usr/local/lib/libboost_thread.a', '-Wl,--no-whole-archive']
   endif
   if boost_system_dep.found()
-    boost_static_link_args += ['/usr/local/lib/libboost_system.a']
+    boost_static_link_args += ['-Wl,--whole-archive', '/usr/local/lib/libboost_system.a', '-Wl,--no-whole-archive']
   endif
   if boost_chrono_dep.found()
-    boost_static_link_args += ['/usr/local/lib/libboost_chrono.a']
+    boost_static_link_args += ['-Wl,--whole-archive', '/usr/local/lib/libboost_chrono.a', '-Wl,--no-whole-archive']
   endif
 else
   boost_thread_dep = dependency('', required: false)
