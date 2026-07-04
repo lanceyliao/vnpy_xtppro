@@ -40,7 +40,7 @@ jobs:
           echo "Python version: $PY_VER (nodot: $PY_VER_NODOT)"
 
           sudo apt-get update
-          sudo apt-get install -y libboost-dev libboost-python${PY_VER_NODOT}-dev libboost-thread-dev libboost-system-dev || true
+          # 不安装 apt boost — 我们用 b2 编译 static 版本，apt 的 shared .so 会干扰
 
           if ldconfig -p 2>/dev/null | grep -q "libboost_python"; then
             echo "System Boost.Python found!"
