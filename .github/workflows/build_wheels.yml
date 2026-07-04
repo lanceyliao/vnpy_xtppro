@@ -153,6 +153,8 @@ jobs:
       # ---- Build wheel ----
       - name: Build wheel (Linux)
         if: runner.os == 'Linux'
+        env:
+          LDFLAGS: "-Wl,--whole-archive /usr/local/lib/libboost_thread.a /usr/local/lib/libboost_system.a -Wl,--no-whole-archive"
         run: |
           python -m build --wheel
 
