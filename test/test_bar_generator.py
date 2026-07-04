@@ -20,7 +20,7 @@ from vnpy.trader.constant import Exchange, Interval
 from vnpy.trader.object import TickData, BarData
 from vnpy.trader.utility import ZoneInfo
 
-from vnpy_xtppro.gateway.xtp_pro_gateway import BarGenerator
+from vnpy_xtppro.gateway.xtp_pro_gateway import BarGenerator, get_session_start, same_trading_session
 
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
@@ -274,6 +274,49 @@ class TestBarGapFilling:
         assert len(cross_day_gaps) == 0, f"Should not gap-fill across days, got {len(cross_day_gaps)} cross-day gap bars"
 
 
+class TestSessionHelpers:
+    """交易时段辅助函数测试"""
+
+    def test_get_session_start_morning(self):
+        """早盘 10:00 → session_start 9:30"""
+        dt = datetime(2023, 7, 3, 10, 0, 0, tzinfo=CHINA_TZ)
+        result = get_session_start(dt)
+        assert result is not None, f"get_session_start({dt}) returned None"
+        assert result.hour == 9 and result.minute == 30, f"Expected 9:30, got {result}"
+
+    def test_get_session_start_afternoon(self):
+        """午盘 13:05 → session_start 13:00"""
+        dt = datetime(2023, 7, 3, 13, 5, 0, tzinfo=CHINA_TZ)
+        result = get_session_start(dt)
+        assert result is not None, f"get_session_start({dt}) returned None"
+        assert result.hour == 13 and result.minute == 0, f"Expected 13:00, got {result}"
+
+    def test_get_session_start_at_930(self):
+        """9:30 本身 → session_start 9:30"""
+        dt = datetime(2023, 7, 3, 9, 30, 0, tzinfo=CHINA_TZ)
+        result = get_session_start(dt)
+        assert result is not None, f"get_session_start({dt}) returned None"
+        assert result.hour == 9 and result.minute == 30
+
+    def test_get_session_start_outside_session(self):
+        """非交易时段 → None"""
+        dt = datetime(2023, 7, 3, 12, 0, 0, tzinfo=CHINA_TZ)
+        result = get_session_start(dt)
+        assert result is None, f"Expected None for 12:00, got {result}"
+
+    def test_same_trading_session_within_morning(self):
+        """早盘内同一时段"""
+        dt1 = datetime(2023, 7, 3, 9, 30, 0, tzinfo=CHINA_TZ)
+        dt2 = datetime(2023, 7, 3, 10, 30, 0, tzinfo=CHINA_TZ)
+        assert same_trading_session(dt1, dt2) is True
+
+    def test_same_trading_session_cross_session(self):
+        """早盘 vs 午盘 → 不同时段"""
+        dt1 = datetime(2023, 7, 3, 10, 30, 0, tzinfo=CHINA_TZ)
+        dt2 = datetime(2023, 7, 3, 13, 0, 0, tzinfo=CHINA_TZ)
+        assert same_trading_session(dt1, dt2) is False
+
+
 class TestOpeningGapFill:
     """开盘补 bar 测试
 
@@ -301,8 +344,19 @@ class TestOpeningGapFill:
         self.bg.update_tick(t2)
         self.bg.update_tick(t3)
 
-        # 应有：30 根开盘补 bar（9:30~9:59）+ 1 根 10:00 的真实 bar = 31 根
-        assert len(self.bars) == 31, f"Expected 31 bars (30 gap + 1 real), got {len(self.bars)}"
+        # 诊断：如果 opening gap-fill 未触发，打印调试信息
+        if len(self.bars) != 31:
+            gap_bars = [b for b in self.bars if b.volume == 0]
+            real_bars = [b for b in self.bars if b.volume > 0]
+            diag = (
+                f"DIAG: bars={len(self.bars)} gap={len(gap_bars)} real={len(real_bars)}\n"
+                f"  last_bars keys={list(self.bg.last_bars.keys())}\n"
+                f"  logs={self.logs}\n"
+                f"  bar datetimes={[b.datetime for b in self.bars[:5]]}"
+            )
+            raise AssertionError(
+                f"Expected 31 bars (30 gap + 1 real), got {len(self.bars)}\n{diag}"
+            )
 
         # 前 30 根是开盘补 bar（volume=0）
         gap_bars = [b for b in self.bars if b.volume == 0]
