@@ -137,10 +137,19 @@ if host_machine.system() != 'windows' and not boost_python_dep.found()
       boost_python_dep = cpp.find_library(name, dirs: ['/usr/local/lib'], required: false)
     endif
   endforeach
-  # 额外 Boost 依赖
+  # 额外 Boost 依赖（Linux static link: 用 find_library 找 .a）
   boost_thread_dep = dependency('boost_thread', required: false)
+  if not boost_thread_dep.found()
+    boost_thread_dep = cpp.find_library('boost_thread', dirs: ['/usr/local/lib'], required: false)
+  endif
   boost_system_dep = dependency('boost_system', required: false)
+  if not boost_system_dep.found()
+    boost_system_dep = cpp.find_library('boost_system', dirs: ['/usr/local/lib'], required: false)
+  endif
   boost_chrono_dep = dependency('boost_chrono', required: false)
+  if not boost_chrono_dep.found()
+    boost_chrono_dep = cpp.find_library('boost_chrono', dirs: ['/usr/local/lib'], required: false)
+  endif
 else
   boost_thread_dep = dependency('', required: false)
   boost_system_dep = dependency('', required: false)
