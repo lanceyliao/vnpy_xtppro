@@ -139,6 +139,24 @@ def same_trading_session(dt1: datetime, dt2: datetime) -> bool:
             return True
     return False
 
+
+def get_session_start(dt: datetime) -> Optional[datetime]:
+    """获取 dt 所属交易时段的开盘时间
+
+    例如 10:05 → 当日 09:30，14:20 → 当日 13:00
+    不在交易时段内返回 None
+    """
+    minute_of_day = dt.hour * 60 + dt.minute
+    for start_h, start_m, end_h, end_m in TRADING_SESSIONS:
+        start = start_h * 60 + start_m
+        end = end_h * 60 + end_m
+        if start <= minute_of_day <= end:
+            return dt.replace(
+                hour=start_h, minute=start_m,
+                second=0, microsecond=0,
+            )
+    return None
+
 # ------------------------------------------------------------------
 # 辅助函数
 # ------------------------------------------------------------------
@@ -257,60 +275,99 @@ class BarGenerator:
     def process_bar(self, bar: BarData) -> None:
         """处理完成的 bar，包括记录和补充缺失
 
-        缺失补充逻辑：
-        - 仅在同一交易时段内补充（same_trading_session）
-        - 跨时段（早盘→午盘、昨日→今日）不补充
-        - 首根 bar（无 last_bar）不补充
-        - 缺失 bar 用 last_bar 的 close_price 构造零量 bar
+        缺失补充逻辑（与 tq_gateway 对齐）：
+        1. 开盘补（首根 bar，无 last_bar）：
+           从 session_start → bar_datetime 之间，用 bar.open_price 构造零量 bar
+           场景：9:45 才收到首根 bar，则补 9:30~9:44 共 15 根
+        2. 盘中补（有 last_bar）：
+           从 last_bar + 1min → bar_datetime 之间，用 last_bar.close_price 构造零量 bar
+           仅在同一交易时段内补充
+        3. 跨时段（早盘→午盘、昨日→今日）不补充
         """
         try:
+            # 统一 bar 时区
+            if bar.datetime.tzinfo is None:
+                bar_datetime = bar.datetime.replace(tzinfo=DB_TZ)
+            else:
+                bar_datetime = bar.datetime
+
             last_bar: Optional[BarData] = self.last_bars.get(bar.vt_symbol)
 
-            if last_bar:
+            if last_bar is None:
+                # ── 开盘补：首根 bar 到来，补 session_start → bar 之间的缺失 ──
+                session_start = get_session_start(bar_datetime)
+                if session_start and session_start < bar_datetime:
+                    fill_price = bar.open_price
+                    fill_oi = bar.open_interest
+                    fill_dt = session_start
+                    while fill_dt < bar_datetime:
+                        gap_bar = BarData(
+                            symbol=bar.symbol,
+                            exchange=bar.exchange,
+                            interval=Interval.MINUTE,
+                            datetime=fill_dt,
+                            gateway_name=bar.gateway_name,
+                            open_price=fill_price,
+                            high_price=fill_price,
+                            low_price=fill_price,
+                            close_price=fill_price,
+                            volume=0,
+                            turnover=0,
+                            open_interest=fill_oi,
+                        )
+                        self.write_log(
+                            f"开盘补充bar: {gap_bar.vt_symbol}, "
+                            f"时间: {gap_bar.datetime}, "
+                            f"价格: {gap_bar.close_price}"
+                        )
+                        self.on_bar(gap_bar)
+                        fill_dt += timedelta(minutes=1)
+
                 self.write_log(
-                    f"process_bar last:{last_bar.datetime} now:{bar.datetime}"
+                    f"process_bar 首根bar: {bar.vt_symbol} {bar_datetime}"
                 )
 
-                # 统一时区
+            else:
+                # ── 盘中补：有 last_bar，补 last+1 → bar 之间的缺失 ──
                 if last_bar.datetime.tzinfo is None:
                     last_bar_datetime = last_bar.datetime.replace(tzinfo=DB_TZ)
                 else:
                     last_bar_datetime = last_bar.datetime
-
-                if bar.datetime.tzinfo is None:
-                    bar_datetime = bar.datetime.replace(tzinfo=DB_TZ)
-                else:
-                    bar_datetime = bar.datetime
 
                 minutes_diff: int = int(
                     (bar_datetime - last_bar_datetime).total_seconds() / 60
                 )
 
                 if minutes_diff > 1 and same_trading_session(last_bar_datetime, bar_datetime):
-                    # 仅在同一交易时段内补充缺失 bar
-                    for i in range(1, minutes_diff):
-                        gap_dt = last_bar_datetime + timedelta(minutes=i)
+                    fill_price = last_bar.close_price
+                    fill_oi = last_bar.open_interest
+                    fill_dt = last_bar_datetime + timedelta(minutes=1)
+                    while fill_dt < bar_datetime:
                         gap_bar = BarData(
                             symbol=bar.symbol,
                             exchange=bar.exchange,
                             interval=Interval.MINUTE,
-                            datetime=gap_dt,
+                            datetime=fill_dt,
                             gateway_name=bar.gateway_name,
-                            open_price=last_bar.close_price,
-                            high_price=last_bar.close_price,
-                            low_price=last_bar.close_price,
-                            close_price=last_bar.close_price,
+                            open_price=fill_price,
+                            high_price=fill_price,
+                            low_price=fill_price,
+                            close_price=fill_price,
                             volume=0,
                             turnover=0,
-                            open_interest=last_bar.open_interest,
+                            open_interest=fill_oi,
                         )
                         self.write_log(
-                            f"补充缺失bar: {gap_bar.vt_symbol}, "
+                            f"盘中补充bar: {gap_bar.vt_symbol}, "
                             f"时间: {gap_bar.datetime}, "
                             f"价格: {gap_bar.close_price}"
                         )
-                        # 统一走 on_bar（不再区分 on_bar_gap）
                         self.on_bar(gap_bar)
+                        fill_dt += timedelta(minutes=1)
+
+                self.write_log(
+                    f"process_bar last:{last_bar_datetime} now:{bar_datetime}"
+                )
 
             # 记录当前 bar
             self.on_bar(bar)
