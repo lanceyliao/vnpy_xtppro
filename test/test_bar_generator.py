@@ -20,7 +20,7 @@ from vnpy.trader.constant import Exchange, Interval
 from vnpy.trader.object import TickData, BarData
 from vnpy.trader.utility import ZoneInfo
 
-from vnpy_xtppro.gateway.xtp_pro_gateway import BarGenerator, get_session_start, same_trading_session
+from vnpy_xtppro.gateway.xtp_pro_gateway import BarGenerator
 
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
@@ -274,47 +274,88 @@ class TestBarGapFilling:
         assert len(cross_day_gaps) == 0, f"Should not gap-fill across days, got {len(cross_day_gaps)} cross-day gap bars"
 
 
+class TestModuleDiag:
+    """CI 环境诊断：检查模块加载状态"""
+
+    def test_module_names_available(self):
+        """检查 xtp_pro_gateway 模块中关键名字是否存在"""
+        import vnpy_xtppro.gateway.xtp_pro_gateway as gw_mod
+        available = dir(gw_mod)
+        key_names = [
+            "BarGenerator", "get_session_start", "same_trading_session",
+            "TRADING_SESSIONS", "EVENT_BAR", "CHINA_TZ",
+            "XtpProGateway", "get_default_setting",
+        ]
+        missing = [n for n in key_names if n not in available]
+        assert not missing, (
+            f"Missing names in xtp_pro_gateway: {missing}\n"
+            f"Available: {[n for n in available if not n.startswith('_')]}"
+        )
+
+    def test_trading_sessions_defined(self):
+        """检查 TRADING_SESSIONS 常量"""
+        import vnpy_xtppro.gateway.xtp_pro_gateway as gw_mod
+        ts = gw_mod.TRADING_SESSIONS
+        assert ts == [(9, 30, 11, 30), (13, 0, 15, 0)], f"TRADING_SESSIONS={ts}"
+
+    def test_get_session_start_callable(self):
+        """检查 get_session_start 可调用"""
+        import vnpy_xtppro.gateway.xtp_pro_gateway as gw_mod
+        func = gw_mod.get_session_start
+        dt = datetime(2023, 7, 3, 10, 0, 0, tzinfo=CHINA_TZ)
+        result = func(dt)
+        assert result is not None, f"get_session_start({dt}) returned None"
+        assert result.hour == 9 and result.minute == 30
+
+
 class TestSessionHelpers:
     """交易时段辅助函数测试"""
+
+    @pytest.fixture(autouse=True)
+    def _import_helpers(self):
+        """动态导入辅助函数（避免顶层 import 失败阻塞整个测试文件）"""
+        import vnpy_xtppro.gateway.xtp_pro_gateway as gw_mod
+        self.get_session_start = gw_mod.get_session_start
+        self.same_trading_session = gw_mod.same_trading_session
 
     def test_get_session_start_morning(self):
         """早盘 10:00 → session_start 9:30"""
         dt = datetime(2023, 7, 3, 10, 0, 0, tzinfo=CHINA_TZ)
-        result = get_session_start(dt)
+        result = self.get_session_start(dt)
         assert result is not None, f"get_session_start({dt}) returned None"
         assert result.hour == 9 and result.minute == 30, f"Expected 9:30, got {result}"
 
     def test_get_session_start_afternoon(self):
         """午盘 13:05 → session_start 13:00"""
         dt = datetime(2023, 7, 3, 13, 5, 0, tzinfo=CHINA_TZ)
-        result = get_session_start(dt)
+        result = self.get_session_start(dt)
         assert result is not None, f"get_session_start({dt}) returned None"
         assert result.hour == 13 and result.minute == 0, f"Expected 13:00, got {result}"
 
     def test_get_session_start_at_930(self):
         """9:30 本身 → session_start 9:30"""
         dt = datetime(2023, 7, 3, 9, 30, 0, tzinfo=CHINA_TZ)
-        result = get_session_start(dt)
+        result = self.get_session_start(dt)
         assert result is not None, f"get_session_start({dt}) returned None"
         assert result.hour == 9 and result.minute == 30
 
     def test_get_session_start_outside_session(self):
         """非交易时段 → None"""
         dt = datetime(2023, 7, 3, 12, 0, 0, tzinfo=CHINA_TZ)
-        result = get_session_start(dt)
+        result = self.get_session_start(dt)
         assert result is None, f"Expected None for 12:00, got {result}"
 
     def test_same_trading_session_within_morning(self):
         """早盘内同一时段"""
         dt1 = datetime(2023, 7, 3, 9, 30, 0, tzinfo=CHINA_TZ)
         dt2 = datetime(2023, 7, 3, 10, 30, 0, tzinfo=CHINA_TZ)
-        assert same_trading_session(dt1, dt2) is True
+        assert self.same_trading_session(dt1, dt2) is True
 
     def test_same_trading_session_cross_session(self):
         """早盘 vs 午盘 → 不同时段"""
         dt1 = datetime(2023, 7, 3, 10, 30, 0, tzinfo=CHINA_TZ)
         dt2 = datetime(2023, 7, 3, 13, 0, 0, tzinfo=CHINA_TZ)
-        assert same_trading_session(dt1, dt2) is False
+        assert self.same_trading_session(dt1, dt2) is False
 
 
 class TestOpeningGapFill:
