@@ -27,7 +27,7 @@ pip install vnpy_xtppro
 
 ```bash
 # Linux: 安装 Boost.Python
-sudo apt install libboost-python310-dev libboost-thread-dev libboost-system-dev
+sudo apt install libboost-python3.10-dev libboost-thread-dev libboost-system-dev
 
 # 编译安装
 pip install -e .
@@ -35,9 +35,73 @@ pip install -e .
 
 `pip install` 会自动通过 meson-python 编译 C++ 绑定，无需手动 meson/ninja。
 
-## 使用
+## 快速开始
 
-### 配置
+### 无 UI 脚本
+
+```bash
+# 填入你的 XTP Pro 账号密码后运行
+python script/run.py
+```
+
+脚本内容（关键部分）：
+
+```python
+from vnpy.event import EventEngine, Event
+from vnpy.trader.engine import MainEngine
+from vnpy.trader.object import SubscribeRequest
+from vnpy.trader.constant import Exchange
+
+from vnpy_xtppro import XtpProGateway
+from vnpy_xtppro.gateway import EVENT_BAR
+
+# 1. 创建引擎
+event_engine = EventEngine()
+main_engine = MainEngine(event_engine)
+main_engine.add_gateway(XtpProGateway)
+
+# 2. 注册事件回调
+def on_bar(event: Event):
+    bar = event.data
+    print(f"BAR {bar.vt_symbol} {bar.datetime} C={bar.close_price} V={bar.volume}")
+
+# 收所有合约的 bar
+event_engine.register(EVENT_BAR, on_bar)
+
+# 只收 600000.SSE 的 bar
+event_engine.register(EVENT_BAR + "600000.SSE", on_bar)
+
+# 3. 连接（等待合约查询完成后返回）
+main_engine.connect(setting, "XTP_PRO")
+
+# 4. 订阅
+req = SubscribeRequest(symbol="600000", exchange=Exchange.SSE)
+main_engine.subscribe(req, "XTP_PRO")
+
+# 5. 启动
+event_engine.start()
+```
+
+### VeighNa UI 中使用
+
+```python
+from vnpy.event import EventEngine
+from vnpy.trader.engine import MainEngine
+from vnpy.trader.ui import MainWindow, create_qapp
+
+from vnpy_xtppro import XtpProGateway
+
+qapp = create_qapp()
+event_engine = EventEngine()
+main_engine = MainEngine(event_engine)
+main_engine.add_gateway(XtpProGateway)
+
+main_window = MainWindow(main_engine, event_engine)
+main_window.showMaximized()
+qapp.exec()
+```
+
+## 配置
 
 在 VeighNa 中添加 `XTP_PRO` 网关，配置以下参数：
 
@@ -55,42 +119,46 @@ pip install -e .
 | 本地网卡IP | 本机网卡 IP（留空自动获取） | — |
 | 每进程订阅数 | 单 worker 进程订阅容量上限 | 500 |
 
-### 事件
+## 事件
 
-| 事件类型 | 说明 |
-|----------|------|
-| `EVENT_TICK` | 原始行情推送（TickData） |
-| `EVENT_BAR` | 分钟线推送（BarData），由 tick 合成，topic = `eBar.` + vt_symbol |
-| `EVENT_CONTRACT` | 合约信息推送（connect 时批量触发） |
-| `EVENT_LOG` | 日志推送 |
+### 事件类型
 
-### Bar 合成
+| 事件类型 | 值 | 说明 |
+|----------|----|------|
+| `EVENT_TICK` | `"eTick."` | VeighNa 核心事件，原始行情推送（TickData） |
+| `EVENT_BAR` | `"eBar."` | 分钟线推送（BarData），由 tick 合成 |
+| `EVENT_CONTRACT` | `"eContract."` | VeighNa 核心事件，合约信息推送 |
+| `EVENT_LOG` | `"eLog"` | VeighNa 核心事件，日志推送 |
+
+### 事件注册方式
+
+与 VeighNa 核心一致，`on_tick` 和 `on_bar` 均推送**两个**事件：
+
+```python
+# 通用事件 — 收到所有合约
+event_engine.register(EVENT_TICK, on_tick)          # 所有 tick
+event_engine.register(EVENT_BAR, on_bar)            # 所有 bar
+
+# 特定合约事件 — 只收到指定合约
+event_engine.register(EVENT_TICK + "600000.SSE", on_tick)   # 只收 600000
+event_engine.register(EVENT_BAR + "600000.SSE", on_bar)     # 只收 600000
+```
+
+> **原理**：`on_tick` 调用 `BaseGateway.on_event(EVENT_TICK, tick)` + `on_event(EVENT_TICK + tick.vt_symbol, tick)`，`on_bar` 同理。
+
+### EVENT_BAR 导入
+
+```python
+from vnpy_xtppro.gateway import EVENT_BAR   # "eBar."
+```
+
+## Bar 合成
 
 网关在子进程中自动将 tick 合成分钟线：
 
-```python
-from vnpy.event.engine import EventEngine, Event
-from vnpy_xtppro.gateway import XtpProGateway
-from vnpy_xtppro.gateway.xtp_pro_gateway import EVENT_BAR
-
-ee = EventEngine()
-gateway = XtpProGateway(ee, "XTP_PRO")
-gateway.connect(setting)  # 等待合约查询完成后返回
-
-# 订阅
-from vnpy.trader.object import SubscribeRequest
-from vnpy.trader.constant import Exchange
-req = SubscribeRequest(symbol="600000", exchange=Exchange.SSE)
-gateway.subscribe(req)
-
-# 注册 bar 事件处理
-def on_bar(event: Event):
-    bar = event.data
-    print(f"Bar: {bar.vt_symbol} {bar.datetime} C={bar.close_price} V={bar.volume}")
-
-ee.register(EVENT_BAR + "600000.SSE", on_bar)
-ee.start()
-```
+- 每个 worker 进程内置 `BarGenerator`，`on_tick` → `BarGenerator.update_tick()` → `on_bar`
+- 分钟线切换点：tick 的 `datetime.minute` 变化时推送上一根 bar
+- 支持多合约并行，每个 `vt_symbol` 独立状态
 
 ### 缺失 Bar 补充
 
@@ -101,7 +169,7 @@ ee.start()
 - 跨时段（早盘→午盘、昨日→今日）不补充
 - 补充 bar 和正常 bar 统一走 `on_bar`，通过 `volume=0` 区分
 
-### 多进程分片
+## 多进程分片
 
 当订阅数量超过单进程容量（默认 500），网关自动起新 worker 进程：
 
@@ -109,7 +177,7 @@ ee.start()
 - tick_queue / bar_queue / log_queue 跨进程共享
 - 已退出进程的订阅自动回收，slot 可复用
 
-### 重连机制
+## 重连机制
 
 ```
 on_disconnected(reason)
@@ -141,17 +209,38 @@ vnpy_xtppro/
 │   │   └── xtp_pro_gateway.py      # 网关主类 + BarGenerator + worker
 │   └── etc/
 │       └── xtppro_md_template.ini  # UDP 配置文件模板
+├── script/
+│   └── run.py                      # 无 UI 启动脚本
 ├── test/
 │   ├── test_bar_generator.py        # Bar 合成器单元测试
 │   ├── test_unit.py                 # API 封装层单元测试
 │   ├── test_mock.py                 # 网关逻辑 mock 测试
-│   └── test_integration.py          # 真实行情集成测试（连接测试服务器）
+│   └── test_integration.py          # 真实行情集成测试
 ├── meson.build                      # Meson 构建配置
 ├── pyproject.toml                   # 项目元数据 + meson-python 构建后端
-├── setup.py                         # setuptools 兼容入口
 └── .github/workflows/
     └── build_wheels.yml             # CI: 多平台编译 + 测试 + 集成测试
 ```
+
+## 架构
+
+三层架构，仅 Layer 1 需要编译：
+
+```
+┌─────────────────────────────────────────────────┐
+│ Layer 3  gateway/xtp_pro_gateway.py  (Python)   │  ← 网关逻辑、BarGenerator、重连
+│           改此层无需重新编译                       │
+├─────────────────────────────────────────────────┤
+│ Layer 2  api/xtp_pro_md_api.py  (Python)        │  ← 继承 vnxtpxquote.QuoteApi，
+│           映射 C++ 回调字典 → Python TickData     │  改此层无需重新编译
+├─────────────────────────────────────────────────┤
+│ Layer 1  vnxtpxquote.so  (C++ 编译)             │  ← Boost.Python 绑定，
+│           暴露 QuoteApi + 71 个方法/回调          │  改此层需重新编译
+└─────────────────────────────────────────────────┘
+```
+
+- **Layer 1** 由 XTP Pro SDK 自带的 `vnxtpxquote.cpp` 生成，71 个 `.def()` 对应 SDK 的 70 个虚函数 + CreateQuoteApi
+- **Layer 2/3** 是纯 Python，修改后 `pip install -e .` 即生效
 
 ## 测试
 
@@ -180,9 +269,9 @@ GitHub Actions 自动执行：
 
 | Job | 说明 |
 |-----|------|
-| Build (Linux/Windows × py3.10/3.11/3.12) | 编译 wheel 并上传 artifact |
-| Test (py3.10/3.11/3.12) | 纯 Python 单元测试 |
-| Integration (py3.10, push only) | 安装 wheel + vnpy + ta-lib，连接真实 MD 服务器测试 |
+| build (Linux/Windows × py3.10/3.11/3.12) | 编译 wheel 并上传 artifact |
+| test (py3.10/3.11/3.12) | 纯 Python 单元测试 |
+| integration (py3.10, push only) | 安装 wheel + vnpy + ta-lib，连接真实 MD 服务器测试 |
 
 集成测试仅在 push 到 main/master 时触发（PR 不跑，保护密钥），凭证通过 GitHub Secrets 传入。
 

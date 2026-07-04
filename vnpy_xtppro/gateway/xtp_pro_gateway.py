@@ -970,9 +970,17 @@ class XtpProGateway(BaseGateway):
         super().on_tick(tick)
 
     def on_bar(self, bar: BarData) -> None:
-        """推送 Bar 事件"""
-        event = Event(EVENT_BAR, bar)
-        self.event_engine.put(event)
+        """推送 Bar 事件
+
+        与 vnpy on_tick 模式一致：推两个事件
+        1) EVENT_BAR          — 通用，收所有 bar
+        2) EVENT_BAR + vt_symbol — 特定合约，只收该合约的 bar
+        """
+        event1 = Event(EVENT_BAR, bar)
+        self.event_engine.put(event1)
+
+        event2 = Event(EVENT_BAR + bar.vt_symbol, bar)
+        self.event_engine.put(event2)
 
     def on_contract(self, contract: ContractData) -> None:
         """推送 Contract 事件"""
