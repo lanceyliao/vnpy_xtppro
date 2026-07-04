@@ -142,13 +142,23 @@ if host_machine.system() != 'windows' and not boost_python_dep.found()
   boost_thread_dep = cpp.find_library('boost_thread', dirs: ['/usr/local/lib'], required: false)
   boost_system_dep = cpp.find_library('boost_system', dirs: ['/usr/local/lib'], required: false)
   boost_chrono_dep = cpp.find_library('boost_chrono', dirs: ['/usr/local/lib'], required: false)
+  # 强制 static link: 把 .a 完整路径加到 link_args，绕过 --as-needed
+  boost_static_link_args = []
+  if boost_thread_dep.found()
+    boost_static_link_args += ['/usr/local/lib/libboost_thread.a']
+  endif
+  if boost_system_dep.found()
+    boost_static_link_args += ['/usr/local/lib/libboost_system.a']
+  endif
+  if boost_chrono_dep.found()
+    boost_static_link_args += ['/usr/local/lib/libboost_chrono.a']
+  endif
 else
   boost_thread_dep = dependency('', required: false)
   boost_system_dep = dependency('', required: false)
   boost_chrono_dep = dependency('', required: false)
+  boost_static_link_args = []
 endif
-
-# 4. Windows: 检查 conda-forge / BOOST_INCLUDE / BOOST_LIB
 if host_machine.system() == 'windows' and not boost_python_dep.found()
   # 优先使用 conda-forge 环境变量 (BOOST_INCLUDE / BOOST_LIB)
   boost_inc_env = run_command('python', '-c', 'import os; print(os.environ.get("BOOST_INCLUDE",""))', check: false).stdout().strip()
@@ -223,13 +233,14 @@ extra_cpp_args += ['-DUSE_64BITS', '-DBUILD_XTP_MD', '-DBUILD_XTP_TD']
 md_link_args = extra_link_args
 if host_machine.system() != 'windows'
   md_link_args += ['-L' + lib_dir, '-lxtpxquoteapi', '-Wl,-rpath,$ORIGIN']
+  md_link_args += boost_static_link_args
 endif
 
 md_module = py.extension_module(
   'vnxtpxquote',
   sources: ['vnpy_xtppro/api/source/vnxtpxquote.cpp'],
   include_directories: include_dirs,
-  dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep, boost_chrono_dep, xtpx_quote_lib],
+  dependencies: [py_dep, boost_python_dep, xtpx_quote_lib],
   cpp_args: extra_cpp_args,
   link_args: md_link_args,
   install: true,
@@ -241,13 +252,14 @@ md_module = py.extension_module(
 td_link_args = extra_link_args
 if host_machine.system() != 'windows'
   td_link_args += ['-L' + lib_dir, '-lxtpxtraderapi', '-Wl,-rpath,$ORIGIN']
+  td_link_args += boost_static_link_args
 endif
 
 td_module = py.extension_module(
   'vnxtpxtrader',
   sources: ['vnpy_xtppro/api/source/vnxtpxtrader.cpp'],
   include_directories: include_dirs,
-  dependencies: [py_dep, boost_python_dep, boost_thread_dep, boost_system_dep, boost_chrono_dep, xtpx_trader_lib],
+  dependencies: [py_dep, boost_python_dep, xtpx_trader_lib],
   cpp_args: extra_cpp_args,
   link_args: td_link_args,
   install: true,
