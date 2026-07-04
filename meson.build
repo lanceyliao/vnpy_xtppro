@@ -83,6 +83,7 @@ endif
 
 # ---- 查找 Boost.Python ----
 # XTP Pro 绑定依赖 Boost.Python（不同于 CTP 的 pybind11）
+boost_static_link_args = []  # Linux: 强制 static link boost_thread/system/chrono
 py_ver = py.version()
 py_major = py_ver.split('.').get(0)
 py_minor = py_ver.split('.').get(1)
@@ -143,7 +144,6 @@ if host_machine.system() != 'windows' and not boost_python_dep.found()
   boost_system_dep = cpp.find_library('boost_system', dirs: ['/usr/local/lib'], required: false)
   boost_chrono_dep = cpp.find_library('boost_chrono', dirs: ['/usr/local/lib'], required: false)
   # 强制 static link: 把 .a 完整路径加到 link_args，绕过 --as-needed
-  boost_static_link_args = []
   if boost_thread_dep.found()
     boost_static_link_args += ['/usr/local/lib/libboost_thread.a']
   endif
@@ -157,7 +157,6 @@ else
   boost_thread_dep = dependency('', required: false)
   boost_system_dep = dependency('', required: false)
   boost_chrono_dep = dependency('', required: false)
-  boost_static_link_args = []
 endif
 if host_machine.system() == 'windows' and not boost_python_dep.found()
   # 优先使用 conda-forge 环境变量 (BOOST_INCLUDE / BOOST_LIB)
